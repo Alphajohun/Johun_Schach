@@ -1,180 +1,335 @@
-// Wir holen React und useState.
-// useState brauchen wir für veränderbare Daten.
-import React, { useState } from 'react'
+// Wir holen React, useState und useEffect.
+import React, { useEffect, useState } from 'react'
 
 // Damit sagen wir später: Zeige unsere App im Browser an.
 import ReactDOM from 'react-dom/client'
 
+const API_BASE = `http://${window.location.hostname}:8000`
+
+function createOrGetClientId() {
+  const key = 'schach_client_id'
+  const existing = localStorage.getItem(key)
+  if (existing) return existing
+
+  const generated = (typeof crypto !== 'undefined' && crypto.randomUUID)
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+
+  localStorage.setItem(key, generated)
+  return generated
+}
+
 // Das ist unsere Hauptfunktion für die ganze Seite.
 function App() {
 
-  // Hier speichern wir die Position vom weißen Stein.
-  // x = Spalte, y = Zeile.
+  // Positionen der Steine.
   const [weiss, setWeiss] = useState({ x: 3, y: 0 })
-
-  // Hier speichern wir die Position vom schwarzen Stein.
   const [schwarz, setSchwarz] = useState({ x: 3, y: 7 })
 
-  // Hier merken wir uns, ob gerade ein Stein ausgewählt ist.
-  // Am Anfang ist nichts ausgewählt, deshalb ist der Text leer.
+  // Auswahl: "white", "black" oder leer.
   const [auswahl, setAuswahl] = useState('')
+
+  // Rolle vom Backend: white / black / spectator / loading.
+  const [rolle, setRolle] = useState('loading')
+
+  // Gewünschte Farbe für Join-Anfrage.
+  const [wunschfarbe, setWunschfarbe] = useState('white')
+
+  // Persistente Browser-ID für /join und /move.
+  const [clientId, setClientId] = useState('')
+
+  // Kurze Statusmeldung für Nutzer.
+  const [meldung, setMeldung] = useState('Verbinde mit Server...')
+
+  const joinWithPreference = async (id, preferredColor) => {
+    try {
+      const res = await fetch(
+        `${API_BASE}/join?client_id=${encodeURIComponent(id)}&preferred_color=${encodeURIComponent(preferredColor)}`
+      )
+      const data = await res.json()
+
+      setRolle(data.role)
+      setWeiss(data.white)
+      setSchwarz(data.black)
+
+      const wanted = preferredColor === 'white' ? 'Weiß' : 'Schwarz'
+      if (data.role === 'white') {
+        if (data.assignment === 'preferred') {
+          setMeldung(`Rolle vergeben: Weiß (Wunsch ${wanted} erfüllt).`)
+        } else if (data.assignment === 'fallback') {
+          setMeldung(`Wunsch ${wanted} war belegt. Du hast Weiß als Fallback bekommen.`)
+        } else {
+          setMeldung('Du bist Weiß. Du darfst nur den weißen Stein ziehen.')
+        }
+      }
+
+      if (data.role === 'black') {
+        if (data.assignment === 'preferred') {
+          setMeldung(`Rolle vergeben: Schwarz (Wunsch ${wanted} erfüllt).`)
+        } else if (data.assignment === 'fallback') {
+          setMeldung(`Wunsch ${wanted} war belegt. Du hast Schwarz als Fallback bekommen.`)
+        } else {
+          setMeldung('Du bist Schwarz. Du darfst nur den schwarzen Stein ziehen.')
+        }
+      }
+
+      if (data.role === 'spectator') {
+        setMeldung('Beide Farben sind belegt. Du bist Zuschauer.')
+      }
+    } catch {
+      setRolle('spectator')
+      setMeldung('Backend nicht erreichbar. Bitte starte den Server auf Port 8000.')
+    }
+  }
+
+  // Beim Start: client_id erstellen, Rolle holen und State-Sync starten.
+  useEffect(() => {
+    let mounted = true
+    const id = createOrGetClientId()
+    setClientId(id)
+
+    const preferred = localStorage.getItem('schach_preferred_color') || 'white'
+    setWunschfarbe(preferred)
+
+    const join = async () => {
+      await joinWithPreference(id, preferred)
+    }
+
+    const pollState = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/state?t=${Date.now()}`, { cache: 'no-store' })
+        const data = await res.json()
+        if (!mounted) return
+        setWeiss(data.white)
+        setSchwarz(data.black)
+      } catch {
+        // polling-fehler still ignorieren, UI bleibt nutzbar
+      }
+    }
+
+    join()
+    const timer = setInterval(pollState, 10)
+
+    return () => {
+      mounted = false
+      clearInterval(timer)
+    }
+  }, [])
+
+  const requestRole = async (preferredColor) => {
+    if (!clientId) return
+    setAuswahl('')
+    setWunschfarbe(preferredColor)
+    localStorage.setItem('schach_preferred_color', preferredColor)
+    await joinWithPreference(clientId, preferredColor)
+  }
+
+  const rollenText =
+    rolle === 'white' ? 'Weiß' :
+      rolle === 'black' ? 'Schwarz' :
+        rolle === 'loading' ? 'Lade...' : 'Zuschauer'
 
   // In diese Liste legen wir später alle 64 Felder vom Brett.
   const felder = []
 
   // Äußere Schleife: geht durch alle Zeilen von 0 bis 7.
   for (let y = 0; y < 8; y++) {
-
     // Innere Schleife: geht durch alle Spalten von 0 bis 7.
     for (let x = 0; x < 8; x++) {
+      // Feldfarbe.
+      const farbe = (x + y) % 2 === 0 ? '#1900ff' : '#b300ff'
 
-      // Hier berechnen wir die Farbe vom Feld.
-      // Gerade Summe = hell, ungerade Summe = dunkel.
-      let farbe = (x + y) % 2 === 0 ? '#1900ff' : '#b300ff'
-
-      // In dieser Variablen speichern wir, was im Feld angezeigt wird.
-      // Am Anfang ist das Feld leer.
+      // Was auf dem Feld angezeigt wird.
       let stein = null
 
-      // Prüfen: steht der weiße Stein auf diesem Feld?
       if (weiss.x === x && weiss.y === y) {
-
-        // Wenn ja, bauen wir einen weißen Kreis.
         stein = (
-          <div style={{
-            // Breite vom Kreis
-            width: '30px',
-            // Höhe vom Kreis
-            height: '30px',
-            // 50% Rundung macht aus dem Rechteck einen Kreis
-            borderRadius: '50%',
-            // Farbe vom Stein
-            backgroundColor: 'white',
-            // Wenn weiß ausgewählt ist, roter Rand. Sonst grauer Rand.
-            border: auswahl === 'weiss' ? '4px solid red' : '2px solid gray'
-          }} />
+          <div
+            style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              backgroundColor: 'white',
+              border: auswahl === 'white' ? '4px solid red' : '2px solid gray'
+            }}
+          />
         )
       }
 
-      // Prüfen: steht der schwarze Stein auf diesem Feld?
       if (schwarz.x === x && schwarz.y === y) {
-
-        // Wenn ja, bauen wir einen schwarzen Kreis.
         stein = (
-          <div style={{
-            // Breite vom Kreis
-            width: '30px',
-            // Höhe vom Kreis
-            height: '30px',
-            // 50% Rundung macht aus dem Rechteck einen Kreis
-            borderRadius: '50%',
-            // Farbe vom Stein
-            backgroundColor: 'black',
-            // Wenn schwarz ausgewählt ist, roter Rand. Sonst kein Rand.
-            border: auswahl === 'schwarz' ? '4px solid red' : 'none'
-          }} />
+          <div
+            style={{
+              width: '30px',
+              height: '30px',
+              borderRadius: '50%',
+              backgroundColor: 'black',
+              border: auswahl === 'black' ? '4px solid red' : '2px solid gray'
+            }}
+          />
         )
       }
 
-      // Jetzt fügen wir ein Feld zur Liste hinzu.
       felder.push(
         <div
-          // Jeder Eintrag braucht einen eindeutigen Schlüssel.
           key={x + '-' + y}
-
-          // Was beim Klick auf dieses Feld passieren soll.
-          onClick={() => {
-
-            // Wenn auf den weißen Stein geklickt wurde:
+          onClick={async () => {
+            // Klick auf weißen Stein
             if (weiss.x === x && weiss.y === y) {
-              // Weiß auswählen
-              setAuswahl('weiss')
-              // Und hier aufhören
+              if (rolle !== 'white') {
+                setAuswahl('')
+                setMeldung('Du bist nicht Weiß und darfst den weißen Stein nicht auswählen.')
+                return
+              }
+              setAuswahl('white')
+              setMeldung('Weißer Stein ausgewählt.')
               return
             }
 
-            // Wenn auf den schwarzen Stein geklickt wurde:
+            // Klick auf schwarzen Stein
             if (schwarz.x === x && schwarz.y === y) {
-              // Schwarz auswählen
-              setAuswahl('schwarz')
-              // Und hier aufhören
+              if (rolle !== 'black') {
+                setAuswahl('')
+                setMeldung('Du bist nicht Schwarz und darfst den schwarzen Stein nicht auswählen.')
+                return
+              }
+              setAuswahl('black')
+              setMeldung('Schwarzer Stein ausgewählt.')
               return
             }
 
-            // Wenn gerade weiß ausgewählt ist:
-            if (auswahl === 'weiss') {
-              // Weißen Stein auf dieses Feld setzen
-              setWeiss({ x: x, y: y })
-              // Auswahl wieder löschen
+            // Ohne Auswahl kein Zug.
+            if (auswahl === '') return
+
+            // Sicherheitscheck: Zuschauer darf nie ziehen.
+            if (rolle === 'spectator' || rolle === 'loading') {
               setAuswahl('')
+              setMeldung('Als Zuschauer darfst du keine Züge machen.')
+              return
             }
 
-            // Wenn gerade schwarz ausgewählt ist:
-            if (auswahl === 'schwarz') {
-              // Schwarzen Stein auf dieses Feld setzen
-              setSchwarz({ x: x, y: y })
-              // Auswahl wieder löschen
+            // Sicherheitscheck: Nur die eigene Farbe darf ziehen.
+            if (auswahl !== rolle) {
               setAuswahl('')
+              setMeldung('Du darfst nur Steine deiner eigenen Farbe bewegen.')
+              return
+            }
+
+            // Zug ans Backend senden.
+            try {
+              const res = await fetch(`${API_BASE}/move`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  client_id: clientId,
+                  color: auswahl,
+                  x,
+                  y
+                })
+              })
+
+              const data = await res.json()
+              setWeiss(data.white)
+              setSchwarz(data.black)
+              setAuswahl('')
+              setMeldung('Zug gesendet.')
+            } catch {
+              setMeldung('Zug konnte nicht gesendet werden. Prüfe Backend-Verbindung.')
             }
           }}
-
-          // Aussehen von diesem Feld
           style={{
-            // Breite vom Feld
             width: '60px',
-            // Höhe vom Feld
             height: '60px',
-            // Feldfarbe
             backgroundColor: farbe,
-            // Inhalt in die Mitte setzen
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            // Zeigt mit der Maus: hier kann man klicken
             cursor: 'pointer'
           }}
         >
-          {/* Hier kommt der Stein hinein, wenn einer auf dem Feld steht. */}
           {stein}
         </div>
       )
     }
   }
 
-  // Jetzt geben wir die ganze Seite zurück.
   return (
-    <div style={{
-      // Ganze Höhe vom Browserfenster benutzen
-      minHeight: '100vh',
-      // Inhalt mit Flexbox anordnen
-      display: 'flex',
-      // Inhalt waagerecht mittig
-      alignItems: 'center',
-      // Inhalt senkrecht mittig
-      justifyContent: 'center',
-      // Weißer Hintergrund
-      backgroundColor: 'white',
-      // Elemente untereinander statt nebeneinander
-      flexDirection: 'column',
-      // Abstand zwischen Text und Brett
-      gap: '20px'
-    }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'white',
+        flexDirection: 'column',
+        gap: '16px'
+      }}
+    >
+      <button
+        type="button"
+        disabled
+        style={{
+          fontSize: '18px',
+          padding: '10px 14px',
+          borderRadius: '10px',
+          border: '2px solid #333',
+          backgroundColor: '#f4f4f4',
+          color: '#111',
+          fontWeight: 700,
+          opacity: 1
+        }}
+      >
+        Du bist: {rollenText}
+      </button>
 
-      {/* Zeigt an, ob gerade ein Stein ausgewählt ist */}
-      <div style={{ fontSize: '20px' }}>
+      <div style={{ display: 'flex', gap: '10px' }}>
+        <button
+          type="button"
+          onClick={() => requestRole('white')}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: wunschfarbe === 'white' ? '3px solid #d60000' : '2px solid #555',
+            backgroundColor: '#ffffff',
+            cursor: 'pointer',
+            fontWeight: 700
+          }}
+        >
+          Ich möchte Weiß
+        </button>
+
+        <button
+          type="button"
+          onClick={() => requestRole('black')}
+          style={{
+            padding: '8px 12px',
+            borderRadius: '8px',
+            border: wunschfarbe === 'black' ? '3px solid #d60000' : '2px solid #555',
+            backgroundColor: '#111111',
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 700
+          }}
+        >
+          Ich möchte Schwarz
+        </button>
+      </div>
+
+      <div style={{ fontSize: '18px' }}>
         Auswahl: {auswahl === '' ? 'kein Stein ausgewaehlt' : auswahl}
       </div>
 
-      {/* Das eigentliche Brett */}
-      <div style={{
-        // Raster-Anzeige
-        display: 'grid',
-        // 8 Spalten mit je 60 Pixel
-        gridTemplateColumns: 'repeat(8, 60px)',
-        // Äußerer Rand vom Brett
-        border: '4px solid #ff0000'
-      }}>
-        {/* Hier werden alle Felder angezeigt */}
+      <div style={{ fontSize: '16px', color: '#333' }}>{meldung}</div>
+
+      <div style={{ fontSize: '12px', color: '#777' }}>Client: {clientId || '...'}</div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(8, 60px)',
+          border: '4px solid #ff0000'
+        }}
+      >
         {felder}
       </div>
     </div>

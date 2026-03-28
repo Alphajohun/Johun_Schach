@@ -38,41 +38,59 @@ black_player = ""
 
 # Diese Route wird aufgerufen, wenn ein Browser dem Spiel beitritt.
 # Der Browser schickt seine client_id mit.
+# Optional kann preferred_color=white oder preferred_color=black gesetzt werden.
 @app.get("/join")
-def join(client_id: str):
+def join(client_id: str, preferred_color: str = ""):
 
     # Wir sagen, dass wir die globalen Variablen verändern wollen.
     global white_player
     global black_player
 
-    # Standardmäßig ist jeder neue Besucher erstmal Zuschauer.
-    role = "spectator"
+    preferred_color = preferred_color.lower().strip()
 
-    # Wenn noch niemand weiß ist:
-    if white_player == "":
-        # dann bekommt dieser Browser die Rolle weiß
-        white_player = client_id
+    # Wenn dieser Browser schon früher weiß war: Rolle bleibt weiß.
+    if white_player == client_id:
         role = "white"
+        assignment = "already_assigned"
 
-    # Sonst: wenn noch niemand schwarz ist:
-    elif black_player == "":
-        # dann bekommt dieser Browser die Rolle schwarz
-        black_player = client_id
-        role = "black"
-
-    # Wenn dieser Browser schon früher weiß war:
-    elif white_player == client_id:
-        # dann bleibt er weiß
-        role = "white"
-
-    # Wenn dieser Browser schon früher schwarz war:
+    # Wenn dieser Browser schon früher schwarz war: Rolle bleibt schwarz.
     elif black_player == client_id:
-        # dann bleibt er schwarz
         role = "black"
+        assignment = "already_assigned"
+
+    else:
+        # Fallback-Reihenfolge:
+        # 1) Wunschfarbe
+        # 2) andere Farbe
+        # 3) Zuschauer
+        if preferred_color == "white":
+            candidate_roles = ["white", "black"]
+        elif preferred_color == "black":
+            candidate_roles = ["black", "white"]
+        else:
+            candidate_roles = ["white", "black"]
+
+        role = "spectator"
+        assignment = "spectator"
+
+        for candidate in candidate_roles:
+            if candidate == "white" and white_player == "":
+                white_player = client_id
+                role = "white"
+                assignment = "preferred" if preferred_color == "white" else "fallback"
+                break
+
+            if candidate == "black" and black_player == "":
+                black_player = client_id
+                role = "black"
+                assignment = "preferred" if preferred_color == "black" else "fallback"
+                break
 
     # Hier schicken wir die Rolle und die aktuellen Positionen zurück.
     return {
         "role": role,
+        "preferred_color": preferred_color,
+        "assignment": assignment,
         "white": {"x": white_x, "y": white_y},
         "black": {"x": black_x, "y": black_y}
     }

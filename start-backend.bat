@@ -11,6 +11,6 @@ call ".venv\Scripts\activate"
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
-uvicorn app:app --reload --port 8000
+uvicorn app:app --reload --host 0.0.0.0 --port 8000
 
 popd
