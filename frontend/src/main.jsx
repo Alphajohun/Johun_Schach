@@ -1,7 +1,4 @@
-// Wir holen React, useState und useEffect.
 import React, { useEffect, useState } from 'react'
-
-// Damit sagen wir später: Zeige unsere App im Browser an.
 import ReactDOM from 'react-dom/client'
 
 const API_BASE = `http://${window.location.hostname}:8000`
@@ -19,96 +16,77 @@ function createOrGetClientId() {
   return generated
 }
 
-// Das ist unsere Hauptfunktion für die ganze Seite.
 function App() {
+  const [trianglesBlack, setTrianglesBlack] = useState([])
+  const [trianglesWhite, setTrianglesWhite] = useState([])
+  const [score, setScore] = useState({ white: 0, black: 0 })
+  const [turn, setTurn] = useState('white')
 
-  // Positionen der Steine.
-  const [weiss, setWeiss] = useState({ x: 3, y: 0 })
-  const [schwarz, setSchwarz] = useState({ x: 3, y: 7 })
-
-  // Auswahl: "white", "black" oder leer.
   const [auswahl, setAuswahl] = useState('')
+  const [selectedFrom, setSelectedFrom] = useState(null)
+  const [hasJoined, setHasJoined] = useState(false)
+  const [wasGameReady, setWasGameReady] = useState(false)
 
-  // Rolle vom Backend: white / black / spectator / loading.
   const [rolle, setRolle] = useState('loading')
-
-  // Gewünschte Farbe für Join-Anfrage.
-  const [wunschfarbe, setWunschfarbe] = useState('white')
-
-  // Persistente Browser-ID für /join und /move.
+  const [wunschfarbe, setWunschfarbe] = useState('spectator')
   const [clientId, setClientId] = useState('')
-
-  // Kurze Statusmeldung für Nutzer.
   const [meldung, setMeldung] = useState('Verbinde mit Server...')
+  const [players, setPlayers] = useState({ white_taken: false, black_taken: false })
+  const gameReady = players.white_taken && players.black_taken
 
-  const joinWithPreference = async (id, preferredColor) => {
+  const applyStateFromServer = (data) => {
+    if (Array.isArray(data.triangles_black)) setTrianglesBlack(data.triangles_black)
+    if (Array.isArray(data.triangles_white)) setTrianglesWhite(data.triangles_white)
+    if (data.score) setScore(data.score)
+    if (data.turn) setTurn(data.turn)
+    if (data.players) {
+      setPlayers({
+        white_taken: !!data.players.white_taken,
+        black_taken: !!data.players.black_taken
+      })
+    }
+  }
+
+  const joinWithPreference = async (id, desiredRole) => {
     try {
       const res = await fetch(
-        `${API_BASE}/join?client_id=${encodeURIComponent(id)}&preferred_color=${encodeURIComponent(preferredColor)}`
+        `${API_BASE}/join?client_id=${encodeURIComponent(id)}&desired_role=${encodeURIComponent(desiredRole)}`
       )
       const data = await res.json()
 
       setRolle(data.role)
-      setWeiss(data.white)
-      setSchwarz(data.black)
+      applyStateFromServer(data)
+      setHasJoined(true)
 
-      const wanted = preferredColor === 'white' ? 'Weiß' : 'Schwarz'
-      if (data.role === 'white') {
-        if (data.assignment === 'preferred') {
-          setMeldung(`Rolle vergeben: Weiß (Wunsch ${wanted} erfüllt).`)
-        } else if (data.assignment === 'fallback') {
-          setMeldung(`Wunsch ${wanted} war belegt. Du hast Weiß als Fallback bekommen.`)
-        } else {
-          setMeldung('Du bist Weiß. Du darfst nur den weißen Stein ziehen.')
-        }
-      }
-
-      if (data.role === 'black') {
-        if (data.assignment === 'preferred') {
-          setMeldung(`Rolle vergeben: Schwarz (Wunsch ${wanted} erfüllt).`)
-        } else if (data.assignment === 'fallback') {
-          setMeldung(`Wunsch ${wanted} war belegt. Du hast Schwarz als Fallback bekommen.`)
-        } else {
-          setMeldung('Du bist Schwarz. Du darfst nur den schwarzen Stein ziehen.')
-        }
-      }
-
-      if (data.role === 'spectator') {
-        setMeldung('Beide Farben sind belegt. Du bist Zuschauer.')
-      }
+      if (data.role === 'white') setMeldung('Du bist Weiß.')
+      if (data.role === 'black') setMeldung('Du bist Schwarz.')
+      if (data.assignment === 'white_taken') setMeldung('Weiß ist bereits belegt. Du bist Zuschauer.')
+      if (data.assignment === 'black_taken') setMeldung('Schwarz ist bereits belegt. Du bist Zuschauer.')
+      if (data.role === 'spectator' && data.assignment === 'spectator') setMeldung('Du bist Zuschauer.')
     } catch {
       setRolle('spectator')
       setMeldung('Backend nicht erreichbar. Bitte starte den Server auf Port 8000.')
     }
   }
 
-  // Beim Start: client_id erstellen, Rolle holen und State-Sync starten.
   useEffect(() => {
     let mounted = true
     const id = createOrGetClientId()
     setClientId(id)
 
-    const preferred = localStorage.getItem('schach_preferred_color') || 'white'
-    setWunschfarbe(preferred)
-
-    const join = async () => {
-      await joinWithPreference(id, preferred)
-    }
-
     const pollState = async () => {
       try {
-        const res = await fetch(`${API_BASE}/state?t=${Date.now()}`, { cache: 'no-store' })
+        const res = await fetch(`${API_BASE}/state?client_id=${encodeURIComponent(id)}&t=${Date.now()}`, { cache: 'no-store' })
         const data = await res.json()
         if (!mounted) return
-        setWeiss(data.white)
-        setSchwarz(data.black)
+        applyStateFromServer(data)
       } catch {
-        // polling-fehler still ignorieren, UI bleibt nutzbar
+        // absichtlich leer
       }
     }
 
-    join()
-    const timer = setInterval(pollState, 10)
+    pollState()
+    const timer = setInterval(pollState, 1000)
 
     return () => {
       mounted = false
@@ -119,52 +97,107 @@ function App() {
   const requestRole = async (preferredColor) => {
     if (!clientId) return
     setAuswahl('')
+    setSelectedFrom(null)
+    setWasGameReady(false)
     setWunschfarbe(preferredColor)
-    localStorage.setItem('schach_preferred_color', preferredColor)
     await joinWithPreference(clientId, preferredColor)
   }
+
+  useEffect(() => {
+    const leaveGame = () => {
+      if (!clientId) return
+      const payload = JSON.stringify({ client_id: clientId })
+      const url = `${API_BASE}/leave`
+
+      // zuverlässiger Fallback: GET-Request via Image (kein CORS nötig)
+      const img = new Image()
+      img.src = `${API_BASE}/leave?client_id=${encodeURIComponent(clientId)}&t=${Date.now()}`
+
+      if (navigator.sendBeacon) {
+        const blob = new Blob([payload], { type: 'application/json' })
+        navigator.sendBeacon(url, blob)
+      } else {
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true
+        }).catch(() => {})
+      }
+    }
+
+    window.addEventListener('beforeunload', leaveGame)
+    window.addEventListener('pagehide', leaveGame)
+
+    return () => {
+      window.removeEventListener('beforeunload', leaveGame)
+      window.removeEventListener('pagehide', leaveGame)
+    }
+  }, [clientId])
+
+  useEffect(() => {
+    // Nur wenn ein laufendes Spiel (beide waren drin) auseinanderfällt,
+    // zurück ins Rollen-Menü. Nicht direkt nach der ersten Rollenwahl.
+    if (gameReady) {
+      setWasGameReady(true)
+      return
+    }
+
+    if (wasGameReady && hasJoined && (rolle === 'white' || rolle === 'black')) {
+      setHasJoined(false)
+      setRolle('loading')
+      setAuswahl('')
+      setSelectedFrom(null)
+      setWasGameReady(false)
+      setMeldung('Ein Spieler hat das Spiel verlassen. Bitte Farbe neu wählen.')
+    }
+  }, [gameReady, wasGameReady, hasJoined, rolle])
 
   const rollenText =
     rolle === 'white' ? 'Weiß' :
       rolle === 'black' ? 'Schwarz' :
         rolle === 'loading' ? 'Lade...' : 'Zuschauer'
 
-  // In diese Liste legen wir später alle 64 Felder vom Brett.
+  const hasBlackTriangleAt = (x, y) => trianglesBlack.findIndex((t) => t.x === x && t.y === y)
+  const hasWhiteTriangleAt = (x, y) => trianglesWhite.findIndex((t) => t.x === x && t.y === y)
+
   const felder = []
 
-  // Äußere Schleife: geht durch alle Zeilen von 0 bis 7.
   for (let y = 0; y < 8; y++) {
-    // Innere Schleife: geht durch alle Spalten von 0 bis 7.
     for (let x = 0; x < 8; x++) {
-      // Feldfarbe.
       const farbe = (x + y) % 2 === 0 ? '#1900ff' : '#b300ff'
-
-      // Was auf dem Feld angezeigt wird.
       let stein = null
 
-      if (weiss.x === x && weiss.y === y) {
+      const blackTriangleIndex = hasBlackTriangleAt(x, y)
+      const whiteTriangleIndex = hasWhiteTriangleAt(x, y)
+
+      if (blackTriangleIndex !== -1) {
+        const isSelected = auswahl === 'triangle_black' && selectedFrom?.x === x && selectedFrom?.y === y
         stein = (
           <div
             style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '50%',
-              backgroundColor: 'white',
-              border: auswahl === 'white' ? '4px solid red' : '2px solid gray'
+              width: 0,
+              height: 0,
+              borderLeft: '18px solid transparent',
+              borderRight: '18px solid transparent',
+              borderBottom: '30px solid black',
+              filter: isSelected ? 'drop-shadow(0 0 4px red)' : 'none'
             }}
           />
         )
       }
 
-      if (schwarz.x === x && schwarz.y === y) {
+      if (whiteTriangleIndex !== -1) {
+        const isSelected = auswahl === 'triangle_white' && selectedFrom?.x === x && selectedFrom?.y === y
         stein = (
           <div
             style={{
-              width: '30px',
-              height: '30px',
-              borderRadius: '50%',
-              backgroundColor: 'black',
-              border: auswahl === 'black' ? '4px solid red' : '2px solid gray'
+              width: 0,
+              height: 0,
+              borderLeft: '18px solid transparent',
+              borderRight: '18px solid transparent',
+              borderBottom: '30px solid white',
+              filter: isSelected ? 'drop-shadow(0 0 4px red)' : 'drop-shadow(0 0 1px #333)'
             }}
           />
         )
@@ -174,65 +207,73 @@ function App() {
         <div
           key={x + '-' + y}
           onClick={async () => {
-            // Klick auf weißen Stein
-            if (weiss.x === x && weiss.y === y) {
-              if (rolle !== 'white') {
-                setAuswahl('')
-                setMeldung('Du bist nicht Weiß und darfst den weißen Stein nicht auswählen.')
-                return
-              }
-              setAuswahl('white')
-              setMeldung('Weißer Stein ausgewählt.')
-              return
-            }
-
-            // Klick auf schwarzen Stein
-            if (schwarz.x === x && schwarz.y === y) {
-              if (rolle !== 'black') {
-                setAuswahl('')
-                setMeldung('Du bist nicht Schwarz und darfst den schwarzen Stein nicht auswählen.')
-                return
-              }
-              setAuswahl('black')
-              setMeldung('Schwarzer Stein ausgewählt.')
-              return
-            }
-
-            // Ohne Auswahl kein Zug.
-            if (auswahl === '') return
-
-            // Sicherheitscheck: Zuschauer darf nie ziehen.
             if (rolle === 'spectator' || rolle === 'loading') {
               setAuswahl('')
+              setSelectedFrom(null)
               setMeldung('Als Zuschauer darfst du keine Züge machen.')
               return
             }
 
-            // Sicherheitscheck: Nur die eigene Farbe darf ziehen.
-            if (auswahl !== rolle) {
-              setAuswahl('')
-              setMeldung('Du darfst nur Steine deiner eigenen Farbe bewegen.')
+            if (blackTriangleIndex !== -1) {
+              if (rolle !== 'black') {
+                setAuswahl('')
+                setSelectedFrom(null)
+                setMeldung('Nur Schwarz darf schwarze Dreiecke auswählen.')
+                return
+              }
+              if (turn !== 'black') {
+                setMeldung('Schwarz ist gerade nicht am Zug.')
+                return
+              }
+              setAuswahl('triangle_black')
+              setSelectedFrom({ x, y })
+              setMeldung('Schwarzes Dreieck ausgewählt.')
               return
             }
 
-            // Zug ans Backend senden.
+            if (whiteTriangleIndex !== -1) {
+              if (rolle !== 'white') {
+                setAuswahl('')
+                setSelectedFrom(null)
+                setMeldung('Nur Weiß darf weiße Dreiecke auswählen.')
+                return
+              }
+              if (turn !== 'white') {
+                setMeldung('Weiß ist gerade nicht am Zug.')
+                return
+              }
+              setAuswahl('triangle_white')
+              setSelectedFrom({ x, y })
+              setMeldung('Weißes Dreieck ausgewählt.')
+              return
+            }
+
+            if (auswahl === '') return
+
             try {
+              const body = {
+                client_id: clientId,
+                color: auswahl,
+                x,
+                y
+              }
+
+              if ((auswahl === 'triangle_black' || auswahl === 'triangle_white') && selectedFrom) {
+                body.from_x = selectedFrom.x
+                body.from_y = selectedFrom.y
+              }
+
               const res = await fetch(`${API_BASE}/move`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  client_id: clientId,
-                  color: auswahl,
-                  x,
-                  y
-                })
+                body: JSON.stringify(body)
               })
 
               const data = await res.json()
-              setWeiss(data.white)
-              setSchwarz(data.black)
+              applyStateFromServer(data)
               setAuswahl('')
-              setMeldung('Zug gesendet.')
+              setSelectedFrom(null)
+              setMeldung(data.message || (data.accepted ? 'Zug gesendet.' : 'Ungültiger Zug.'))
             } catch {
               setMeldung('Zug konnte nicht gesendet werden. Prüfe Backend-Verbindung.')
             }
@@ -251,6 +292,105 @@ function App() {
         </div>
       )
     }
+  }
+
+  if (!hasJoined) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'white',
+          flexDirection: 'column',
+          gap: '16px'
+        }}
+      >
+        <div style={{ fontSize: '28px', fontWeight: 800 }}>Welche Farbe möchtest du?</div>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={() => requestRole('white')}
+            disabled={players.white_taken}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '2px solid #333',
+              backgroundColor: players.white_taken ? '#eee' : '#fff',
+              cursor: players.white_taken ? 'not-allowed' : 'pointer',
+              fontWeight: 700
+            }}
+          >
+            Weiß {players.white_taken ? '(belegt)' : ''}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => requestRole('black')}
+            disabled={players.black_taken}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '2px solid #333',
+              backgroundColor: players.black_taken ? '#555' : '#111',
+              color: 'white',
+              cursor: players.black_taken ? 'not-allowed' : 'pointer',
+              fontWeight: 700
+            }}
+          >
+            Schwarz {players.black_taken ? '(belegt)' : ''}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => requestRole('spectator')}
+            style={{
+              padding: '10px 14px',
+              borderRadius: '10px',
+              border: '2px solid #333',
+              backgroundColor: '#f6f6f6',
+              cursor: 'pointer',
+              fontWeight: 700
+            }}
+          >
+            Zuschauer
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if ((rolle === 'white' || rolle === 'black') && !gameReady) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: 'white',
+          flexDirection: 'column',
+          gap: '18px'
+        }}
+      >
+        <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+        <div style={{ fontSize: '30px', fontWeight: 800 }}>Auf Spieler warten</div>
+        <div
+          style={{
+            width: '54px',
+            height: '54px',
+            borderRadius: '50%',
+            border: '6px solid #d9d9d9',
+            borderTop: '6px solid #333',
+            animation: 'spin 1s linear infinite'
+          }}
+        />
+        <div style={{ fontSize: '16px', color: '#444' }}>
+          Du bist {rollenText}. Das Spiel startet, sobald beide Farben besetzt sind.
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -282,45 +422,49 @@ function App() {
         Du bist: {rollenText}
       </button>
 
-      <div style={{ display: 'flex', gap: '10px' }}>
-        <button
-          type="button"
-          onClick={() => requestRole('white')}
-          style={{
-            padding: '8px 12px',
-            borderRadius: '8px',
-            border: wunschfarbe === 'white' ? '3px solid #d60000' : '2px solid #555',
-            backgroundColor: '#ffffff',
-            cursor: 'pointer',
-            fontWeight: 700
-          }}
-        >
-          Ich möchte Weiß
-        </button>
-
-        <button
-          type="button"
-          onClick={() => requestRole('black')}
-          style={{
-            padding: '8px 12px',
-            borderRadius: '8px',
-            border: wunschfarbe === 'black' ? '3px solid #d60000' : '2px solid #555',
-            backgroundColor: '#111111',
-            color: 'white',
-            cursor: 'pointer',
-            fontWeight: 700
-          }}
-        >
-          Ich möchte Schwarz
-        </button>
-      </div>
-
       <div style={{ fontSize: '18px' }}>
         Auswahl: {auswahl === '' ? 'kein Stein ausgewaehlt' : auswahl}
       </div>
 
-      <div style={{ fontSize: '16px', color: '#333' }}>{meldung}</div>
+      <div style={{ fontSize: '20px', fontWeight: 700 }}>
+        Scoreboard — Weiß: {score.white} | Schwarz: {score.black}
+      </div>
 
+      <div style={{ fontSize: '18px', fontWeight: 700 }}>
+        Am Zug: {turn === 'white' ? 'Weiß' : 'Schwarz'}
+      </div>
+
+      <button
+        type="button"
+        onClick={async () => {
+          try {
+            const res = await fetch(`${API_BASE}/reset_round`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ client_id: clientId })
+            })
+            const data = await res.json()
+            applyStateFromServer(data)
+            setAuswahl('')
+            setSelectedFrom(null)
+            setMeldung(data.message || 'Runde zurückgesetzt.')
+          } catch {
+            setMeldung('Reset fehlgeschlagen. Prüfe Backend-Verbindung.')
+          }
+        }}
+        style={{
+          padding: '10px 14px',
+          borderRadius: '10px',
+          border: '2px solid #333',
+          backgroundColor: '#ffe9e9',
+          cursor: 'pointer',
+          fontWeight: 700
+        }}
+      >
+        Runde aufgeben & Punkt an Gegner
+      </button>
+
+      <div style={{ fontSize: '16px', color: '#333' }}>{meldung}</div>
       <div style={{ fontSize: '12px', color: '#777' }}>Client: {clientId || '...'}</div>
 
       <div
@@ -336,5 +480,4 @@ function App() {
   )
 }
 
-// Hier sagen wir: App im Element mit id="root" anzeigen.
 ReactDOM.createRoot(document.getElementById('root')).render(<App />)

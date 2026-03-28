@@ -1,6 +1,7 @@
 # Wir holen FastAPI.
 # Damit bauen wir unseren kleinen Web-Server.
 from fastapi import FastAPI
+import time
 
 # Das brauchen wir, damit das Frontend auf den Server zugreifen darf.
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI()
 
 # Hier erlauben wir Zugriffe vom Frontend.
-# Für diese Lernaufgabe erlauben wir einfach alles.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,126 +17,383 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Startposition vom weißen Stein:
-# x = Spalte, y = Zeile
-white_x = 3
-white_y = 0
+# Dreiecke:
+# schwarz auf Reihe 2 (y=1), weiß auf Reihe 7 (y=6)
+black_triangles = [{"x": x, "y": 1} for x in range(8)]
+white_triangles = [{"x": x, "y": 6} for x in range(8)]
 
-# Startposition vom schwarzen Stein:
-# x = Spalte, y = Zeile
-black_x = 3
-black_y = 7
+# Punkte-Stand
+white_score = 0
+black_score = 0
 
-# Hier merken wir uns, welcher Browser weiß ist.
-# Am Anfang ist noch niemand weiß.
+# Zugreihenfolge
+current_turn = "white"
+
+# Zugewiesene Spieler
 white_player = ""
-
-# Hier merken wir uns, welcher Browser schwarz ist.
-# Am Anfang ist noch niemand schwarz.
 black_player = ""
 
+# Letzte Aktivität je Spieler (Auto-Freigabe bei Verbindungsabbruch)
+white_last_seen = 0.0
+black_last_seen = 0.0
 
-# Diese Route wird aufgerufen, wenn ein Browser dem Spiel beitritt.
-# Der Browser schickt seine client_id mit.
-# Optional kann preferred_color=white oder preferred_color=black gesetzt werden.
-@app.get("/join")
-def join(client_id: str, preferred_color: str = ""):
+PLAYER_TIMEOUT_SECONDS = 2.5
 
-    # Wir sagen, dass wir die globalen Variablen verändern wollen.
+
+def clear_all_players_and_reset():
     global white_player
     global black_player
+    global white_last_seen
+    global black_last_seen
 
-    preferred_color = preferred_color.lower().strip()
+    white_player = ""
+    black_player = ""
+    white_last_seen = 0.0
+    black_last_seen = 0.0
+    reset_positions()
 
-    # Wenn dieser Browser schon früher weiß war: Rolle bleibt weiß.
+
+def cleanup_disconnected_players():
+    global white_player
+    global black_player
+    global white_last_seen
+    global black_last_seen
+
+    now = time.time()
+    had_both_players = (white_player != "" and black_player != "")
+
+    if white_player != "" and (now - white_last_seen) > PLAYER_TIMEOUT_SECONDS:
+        white_player = ""
+        white_last_seen = 0.0
+
+    if black_player != "" and (now - black_last_seen) > PLAYER_TIMEOUT_SECONDS:
+        black_player = ""
+        black_last_seen = 0.0
+
+    # Wenn ein aktives 2-Spieler-Spiel auseinanderfällt,
+    # beide ausloggen und alles freigeben.
+    if had_both_players and (white_player == "" or black_player == ""):
+        clear_all_players_and_reset()
+
+
+def touch_player(client_id: str):
+    global white_last_seen
+    global black_last_seen
+
+    now = time.time()
+    if client_id == white_player:
+        white_last_seen = now
+    if client_id == black_player:
+        black_last_seen = now
+
+
+def current_state():
+    cleanup_disconnected_players()
+    return {
+        "triangles_black": black_triangles,
+        "triangles_white": white_triangles,
+        "score": {"white": white_score, "black": black_score},
+        "turn": current_turn,
+        "players": {
+            "white_taken": white_player != "",
+            "black_taken": black_player != "",
+            "white_player": white_player,
+            "black_player": black_player,
+        },
+    }
+
+
+def reset_positions():
+    global black_triangles
+    global white_triangles
+    global current_turn
+
+    black_triangles = [{"x": x, "y": 1} for x in range(8)]
+    white_triangles = [{"x": x, "y": 6} for x in range(8)]
+    current_turn = "white"
+
+
+def find_triangle_index(triangles: list, x: int, y: int):
+    for idx, t in enumerate(triangles):
+        if t["x"] == x and t["y"] == y:
+            return idx
+    return -1
+
+
+def cell_occupied(x: int, y: int, ignore_kind: str = "", ignore_index: int = -1):
+    for idx, t in enumerate(black_triangles):
+        if ignore_kind == "triangle_black" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
+    for idx, t in enumerate(white_triangles):
+        if ignore_kind == "triangle_white" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
+    return False
+
+
+@app.get("/join")
+def join(client_id: str, desired_role: str = "spectator"):
+    global white_player
+    global black_player
+    global white_last_seen
+    global black_last_seen
+
+    cleanup_disconnected_players()
+
+    desired_role = desired_role.lower().strip()
+    if desired_role not in ["white", "black", "spectator"]:
+        desired_role = "spectator"
+
     if white_player == client_id:
         role = "white"
         assignment = "already_assigned"
-
-    # Wenn dieser Browser schon früher schwarz war: Rolle bleibt schwarz.
+        touch_player(client_id)
     elif black_player == client_id:
         role = "black"
         assignment = "already_assigned"
-
+        touch_player(client_id)
     else:
-        # Fallback-Reihenfolge:
-        # 1) Wunschfarbe
-        # 2) andere Farbe
-        # 3) Zuschauer
-        if preferred_color == "white":
-            candidate_roles = ["white", "black"]
-        elif preferred_color == "black":
-            candidate_roles = ["black", "white"]
-        else:
-            candidate_roles = ["white", "black"]
-
-        role = "spectator"
-        assignment = "spectator"
-
-        for candidate in candidate_roles:
-            if candidate == "white" and white_player == "":
+        if desired_role == "white":
+            if white_player == "":
                 white_player = client_id
+                white_last_seen = time.time()
                 role = "white"
-                assignment = "preferred" if preferred_color == "white" else "fallback"
-                break
-
-            if candidate == "black" and black_player == "":
+                assignment = "assigned"
+            else:
+                role = "spectator"
+                assignment = "white_taken"
+        elif desired_role == "black":
+            if black_player == "":
                 black_player = client_id
+                black_last_seen = time.time()
                 role = "black"
-                assignment = "preferred" if preferred_color == "black" else "fallback"
-                break
+                assignment = "assigned"
+            else:
+                role = "spectator"
+                assignment = "black_taken"
+        else:
+            role = "spectator"
+            assignment = "spectator"
 
-    # Hier schicken wir die Rolle und die aktuellen Positionen zurück.
     return {
         "role": role,
-        "preferred_color": preferred_color,
+        "desired_role": desired_role,
         "assignment": assignment,
-        "white": {"x": white_x, "y": white_y},
-        "black": {"x": black_x, "y": black_y}
+        **current_state(),
     }
 
 
-# Diese Route gibt einfach den aktuellen Stand zurück.
-@app.get("/state")
-def get_state():
+@app.post("/leave")
+def leave(data: dict):
+    cleanup_disconnected_players()
+
+    client_id = data.get("client_id", "")
+
+    if client_id == white_player:
+        clear_all_players_and_reset()
+    elif client_id == black_player:
+        clear_all_players_and_reset()
+
     return {
-        "white": {"x": white_x, "y": white_y},
-        "black": {"x": black_x, "y": black_y}
+        "accepted": True,
+        "message": "Spieler ausgeloggt.",
+        **current_state(),
     }
 
 
-# Diese Route nimmt einen Zug vom Frontend an.
-# Das Frontend schickt:
-# client_id, color, x, y
+@app.get("/leave")
+def leave_get(client_id: str):
+    return leave({"client_id": client_id})
+
+
+@app.get("/state")
+def get_state(client_id: str = ""):
+    if client_id != "":
+        touch_player(client_id)
+    return current_state()
+
+
 @app.post("/move")
 def move(data: dict):
+    global current_turn
+    global white_player
+    global black_player
 
-    # Wir sagen wieder, dass wir globale Variablen ändern wollen.
-    global white_x
-    global white_y
-    global black_x
-    global black_y
-
-    # Daten aus dem gesendeten Paket holen
     client_id = data["client_id"]
     color = data["color"]
     x = data["x"]
     y = data["y"]
+    from_x = data.get("from_x")
+    from_y = data.get("from_y")
 
-    # Wenn weiß ziehen will und dieser Browser wirklich weiß ist:
-    if color == "white" and client_id == white_player:
-        # dann neue Position für weiß speichern
-        white_x = x
-        white_y = y
+    accepted = False
+    message = "Ungültiger Zug."
 
-    # Wenn schwarz ziehen will und dieser Browser wirklich schwarz ist:
-    if color == "black" and client_id == black_player:
-        # dann neue Position für schwarz speichern
-        black_x = x
-        black_y = y
+    cleanup_disconnected_players()
+    touch_player(client_id)
 
-    # Danach schicken wir den neuen Stand zurück.
+    # Spielen erst erlauben, wenn beide Farben besetzt sind.
+    if white_player == "" or black_player == "":
+        return {
+            "accepted": False,
+            "message": "Spiel startet erst, wenn Weiß und Schwarz besetzt sind.",
+            **current_state(),
+        }
+
+    if x < 0 or x > 7 or y < 0 or y > 7:
+        return {
+            "accepted": False,
+            "message": "Zug außerhalb des Bretts.",
+            **current_state(),
+        }
+
+    # Zugreihenfolge erzwingen
+    if current_turn == "white" and color != "triangle_white":
+        message = "Weiß ist am Zug."
+    elif current_turn == "black" and color != "triangle_black":
+        message = "Schwarz ist am Zug."
+
+    # Schwarzer Bauer: Richtung Gegner (nach unten, y+1)
+    elif color == "triangle_black":
+        if client_id != black_player:
+            message = "Nur der schwarze Spieler darf schwarze Bauern bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für schwarzen Bauern."
+        else:
+            idx = find_triangle_index(black_triangles, from_x, from_y)
+            if idx == -1:
+                message = "Schwarzer Bauer auf Quellfeld nicht gefunden."
+            elif from_y == 7:
+                message = "Schwarzer Bauer steht am Rand und kann nicht mehr ziehen."
+            else:
+                one_step_y = from_y + 1
+                two_step_y = from_y + 2
+                is_forward_one = (x == from_x and y == one_step_y)
+                is_forward_two = (x == from_x and from_y == 1 and y == two_step_y)
+                is_capture = (y == one_step_y and (x == from_x - 1 or x == from_x + 1))
+
+                if is_forward_one:
+                    if cell_occupied(x, y):
+                        message = "Vor dem Bauern steht eine Figur."
+                    else:
+                        black_triangles[idx]["x"] = x
+                        black_triangles[idx]["y"] = y
+                        accepted = True
+                        message = "Schwarzer Bauer wurde bewegt."
+                elif is_forward_two:
+                    if cell_occupied(from_x, one_step_y) or cell_occupied(x, y):
+                        message = "Der Zwei-Felder-Zug ist blockiert."
+                    else:
+                        black_triangles[idx]["x"] = x
+                        black_triangles[idx]["y"] = y
+                        accepted = True
+                        message = "Schwarzer Bauer wurde 2 Felder bewegt."
+                elif is_capture:
+                    capture_idx = find_triangle_index(white_triangles, x, y)
+                    if capture_idx == -1:
+                        message = "Diagonal kann nur geschlagen werden, wenn dort ein weißer Bauer steht."
+                    else:
+                        del white_triangles[capture_idx]
+                        black_triangles[idx]["x"] = x
+                        black_triangles[idx]["y"] = y
+                        accepted = True
+                        message = "Schwarzer Bauer hat geschlagen."
+                else:
+                    message = "Ungültiger Zug für schwarzen Bauern."
+
+    # Weißer Bauer: Richtung Gegner (nach oben, y-1)
+    elif color == "triangle_white":
+        if client_id != white_player:
+            message = "Nur der weiße Spieler darf weiße Bauern bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für weißen Bauern."
+        else:
+            idx = find_triangle_index(white_triangles, from_x, from_y)
+            if idx == -1:
+                message = "Weißer Bauer auf Quellfeld nicht gefunden."
+            elif from_y == 0:
+                message = "Weißer Bauer steht am Rand und kann nicht mehr ziehen."
+            else:
+                one_step_y = from_y - 1
+                two_step_y = from_y - 2
+                is_forward_one = (x == from_x and y == one_step_y)
+                is_forward_two = (x == from_x and from_y == 6 and y == two_step_y)
+                is_capture = (y == one_step_y and (x == from_x - 1 or x == from_x + 1))
+
+                if is_forward_one:
+                    if cell_occupied(x, y):
+                        message = "Vor dem Bauern steht eine Figur."
+                    else:
+                        white_triangles[idx]["x"] = x
+                        white_triangles[idx]["y"] = y
+                        accepted = True
+                        message = "Weißer Bauer wurde bewegt."
+                elif is_forward_two:
+                    if cell_occupied(from_x, one_step_y) or cell_occupied(x, y):
+                        message = "Der Zwei-Felder-Zug ist blockiert."
+                    else:
+                        white_triangles[idx]["x"] = x
+                        white_triangles[idx]["y"] = y
+                        accepted = True
+                        message = "Weißer Bauer wurde 2 Felder bewegt."
+                elif is_capture:
+                    capture_idx = find_triangle_index(black_triangles, x, y)
+                    if capture_idx == -1:
+                        message = "Diagonal kann nur geschlagen werden, wenn dort ein schwarzer Bauer steht."
+                    else:
+                        del black_triangles[capture_idx]
+                        white_triangles[idx]["x"] = x
+                        white_triangles[idx]["y"] = y
+                        accepted = True
+                        message = "Weißer Bauer hat geschlagen."
+                else:
+                    message = "Ungültiger Zug für weißen Bauern."
+
+    else:
+        message = "Unbekannte Figur."
+
+    if accepted:
+        current_turn = "black" if current_turn == "white" else "white"
+
     return {
-        "white": {"x": white_x, "y": white_y},
-        "black": {"x": black_x, "y": black_y}
+        "accepted": accepted,
+        "message": message,
+        **current_state(),
+    }
+
+
+@app.post("/reset_round")
+def reset_round(data: dict):
+    global white_score
+    global black_score
+
+    client_id = data.get("client_id", "")
+
+    cleanup_disconnected_players()
+    touch_player(client_id)
+
+    if client_id == white_player:
+        black_score += 1
+        message = "Runde zurückgesetzt. Punkt für Schwarz."
+        accepted = True
+    elif client_id == black_player:
+        white_score += 1
+        message = "Runde zurückgesetzt. Punkt für Weiß."
+        accepted = True
+    else:
+        message = "Nur Weiß oder Schwarz dürfen die Runde zurücksetzen."
+        accepted = False
+
+    if accepted:
+        reset_positions()
+
+    return {
+        "accepted": accepted,
+        "message": message,
+        **current_state(),
     }
