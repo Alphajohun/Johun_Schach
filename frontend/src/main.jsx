@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
-const API_BASE = `http://${window.location.hostname}:8000`
+const API_BASE =
+  (import.meta.env.VITE_API_URL && String(import.meta.env.VITE_API_URL).trim().replace(/\/$/, '')) ||
+  `http://${window.location.hostname}:8000`
 
 function createOrGetClientId() {
   const key = 'schach_client_id'
