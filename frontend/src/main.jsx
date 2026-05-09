@@ -19,6 +19,8 @@ function createOrGetClientId() {
 function App() {
   const [trianglesBlack, setTrianglesBlack] = useState([])
   const [trianglesWhite, setTrianglesWhite] = useState([])
+  const [rooksBlack, setRooksBlack] = useState([])
+  const [rooksWhite, setRooksWhite] = useState([])
   const [score, setScore] = useState({ white: 0, black: 0 })
   const [turn, setTurn] = useState('white')
 
@@ -37,6 +39,8 @@ function App() {
   const applyStateFromServer = (data) => {
     if (Array.isArray(data.triangles_black)) setTrianglesBlack(data.triangles_black)
     if (Array.isArray(data.triangles_white)) setTrianglesWhite(data.triangles_white)
+    if (Array.isArray(data.rooks_black)) setRooksBlack(data.rooks_black)
+    if (Array.isArray(data.rooks_white)) setRooksWhite(data.rooks_white)
     if (data.score) setScore(data.score)
     if (data.turn) setTurn(data.turn)
     if (data.players) {
@@ -86,7 +90,7 @@ function App() {
     }
 
     pollState()
-    const timer = setInterval(pollState, 1000)
+    const timer = setInterval(pollState, 80)
 
     return () => {
       mounted = false
@@ -160,16 +164,23 @@ function App() {
 
   const hasBlackTriangleAt = (x, y) => trianglesBlack.findIndex((t) => t.x === x && t.y === y)
   const hasWhiteTriangleAt = (x, y) => trianglesWhite.findIndex((t) => t.x === x && t.y === y)
+  const hasBlackRookAt = (x, y) => rooksBlack.findIndex((t) => t.x === x && t.y === y)
+  const hasWhiteRookAt = (x, y) => rooksWhite.findIndex((t) => t.x === x && t.y === y)
 
   const felder = []
 
   for (let y = 0; y < 8; y++) {
     for (let x = 0; x < 8; x++) {
-      const farbe = (x + y) % 2 === 0 ? '#1900ff' : '#b300ff'
+      const farbe = (x + y) % 2 === 0 ? '#f0d9b5' : '#b58863'
       let stein = null
 
       const blackTriangleIndex = hasBlackTriangleAt(x, y)
       const whiteTriangleIndex = hasWhiteTriangleAt(x, y)
+      const blackRookIndex = hasBlackRookAt(x, y)
+      const whiteRookIndex = hasWhiteRookAt(x, y)
+
+      const isSelectedBlackRook = auswahl === 'rook_black' && selectedFrom?.x === x && selectedFrom?.y === y
+      const isSelectedWhiteRook = auswahl === 'rook_white' && selectedFrom?.x === x && selectedFrom?.y === y
 
       if (blackTriangleIndex !== -1) {
         const isSelected = auswahl === 'triangle_black' && selectedFrom?.x === x && selectedFrom?.y === y
@@ -196,10 +207,53 @@ function App() {
               height: 0,
               borderLeft: '18px solid transparent',
               borderRight: '18px solid transparent',
-              borderBottom: '30px solid white',
-              filter: isSelected ? 'drop-shadow(0 0 4px red)' : 'drop-shadow(0 0 1px #333)'
+              borderBottom: '30px solid #fff',
+              filter: isSelected ? 'drop-shadow(0 0 4px red)' : 'drop-shadow(0 0 0.5px #000)'
             }}
           />
+        )
+      }
+
+      if (blackRookIndex !== -1) {
+        stein = (
+          <div
+            style={{
+              width: '60px',
+              height: '60px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '52px',
+              lineHeight: 1,
+              color: '#111',
+              textShadow: isSelectedBlackRook ? '0 0 4px red' : 'none',
+              userSelect: 'none'
+            }}
+          >
+            ♜
+          </div>
+        )
+      }
+
+      if (whiteRookIndex !== -1) {
+        stein = (
+          <div
+            style={{
+              width: '60px',
+              height: '60px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: '52px',
+              lineHeight: 1,
+              color: '#fff',
+              textShadow: isSelectedWhiteRook ? '0 0 4px red, 0 0 0.5px #000' : '0 0 0.5px #000',
+              WebkitTextStroke: '0.35px #000',
+              userSelect: 'none'
+            }}
+          >
+            ♖
+          </div>
         )
       }
 
@@ -214,7 +268,33 @@ function App() {
               return
             }
 
+            // DEBUG-LOG: möglicher Schlag-Bug, wenn Zielfeld mit Gegnerbauer angeklickt wird.
+            if (auswahl === 'triangle_white' && selectedFrom && blackTriangleIndex !== -1) {
+              console.info('[DEBUG capture-intent blocked?] white selected pawn clicked black-occupied target', {
+                selectedFrom,
+                target: { x, y },
+                blackTriangleIndex,
+                role: rolle,
+                turn
+              })
+            }
+
+            if (auswahl === 'triangle_black' && selectedFrom && whiteTriangleIndex !== -1) {
+              console.info('[DEBUG capture-intent blocked?] black selected pawn clicked white-occupied target', {
+                selectedFrom,
+                target: { x, y },
+                whiteTriangleIndex,
+                role: rolle,
+                turn
+              })
+            }
+
             if (blackTriangleIndex !== -1) {
+              // Wenn ein weißer Bauer bereits ausgewählt ist, soll der gegnerische
+              // schwarze Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
+              if (auswahl === 'triangle_white' && selectedFrom) {
+                // Kein return: weiter unten wird normal der Move-Request gesendet.
+              } else {
               if (rolle !== 'black') {
                 setAuswahl('')
                 setSelectedFrom(null)
@@ -229,9 +309,38 @@ function App() {
               setSelectedFrom({ x, y })
               setMeldung('Schwarzes Dreieck ausgewählt.')
               return
+              }
+            }
+
+            if (blackRookIndex !== -1) {
+              if (auswahl === 'triangle_white' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
+              } else if (auswahl === 'rook_white' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
+              } else {
+                if (rolle !== 'black') {
+                  setAuswahl('')
+                  setSelectedFrom(null)
+                  setMeldung('Nur Schwarz darf schwarze Türme auswählen.')
+                  return
+                }
+                if (turn !== 'black') {
+                  setMeldung('Schwarz ist gerade nicht am Zug.')
+                  return
+                }
+                setAuswahl('rook_black')
+                setSelectedFrom({ x, y })
+                setMeldung('Schwarzer Turm ausgewählt.')
+                return
+              }
             }
 
             if (whiteTriangleIndex !== -1) {
+              // Wenn ein schwarzer Bauer bereits ausgewählt ist, soll der gegnerische
+              // weiße Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
+              if (auswahl === 'triangle_black' && selectedFrom) {
+                // Kein return: weiter unten wird normal der Move-Request gesendet.
+              } else {
               if (rolle !== 'white') {
                 setAuswahl('')
                 setSelectedFrom(null)
@@ -246,6 +355,30 @@ function App() {
               setSelectedFrom({ x, y })
               setMeldung('Weißes Dreieck ausgewählt.')
               return
+              }
+            }
+
+            if (whiteRookIndex !== -1) {
+              if (auswahl === 'triangle_black' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
+              } else if (auswahl === 'rook_black' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
+              } else {
+                if (rolle !== 'white') {
+                  setAuswahl('')
+                  setSelectedFrom(null)
+                  setMeldung('Nur Weiß darf weiße Türme auswählen.')
+                  return
+                }
+                if (turn !== 'white') {
+                  setMeldung('Weiß ist gerade nicht am Zug.')
+                  return
+                }
+                setAuswahl('rook_white')
+                setSelectedFrom({ x, y })
+                setMeldung('Weißer Turm ausgewählt.')
+                return
+              }
             }
 
             if (auswahl === '') return
@@ -258,7 +391,11 @@ function App() {
                 y
               }
 
-              if ((auswahl === 'triangle_black' || auswahl === 'triangle_white') && selectedFrom) {
+              if (
+                (auswahl === 'triangle_black' || auswahl === 'triangle_white' ||
+                  auswahl === 'rook_black' || auswahl === 'rook_white') &&
+                selectedFrom
+              ) {
                 body.from_x = selectedFrom.x
                 body.from_y = selectedFrom.y
               }

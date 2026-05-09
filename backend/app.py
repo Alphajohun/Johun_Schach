@@ -22,6 +22,10 @@ app.add_middleware(
 black_triangles = [{"x": x, "y": 1} for x in range(8)]
 white_triangles = [{"x": x, "y": 6} for x in range(8)]
 
+# Türme in den Ecken der jeweiligen Seiten
+black_rooks = [{"x": 0, "y": 0}, {"x": 7, "y": 0}]
+white_rooks = [{"x": 0, "y": 7}, {"x": 7, "y": 7}]
+
 # Punkte-Stand
 white_score = 0
 black_score = 0
@@ -92,6 +96,8 @@ def current_state():
     return {
         "triangles_black": black_triangles,
         "triangles_white": white_triangles,
+        "rooks_black": black_rooks,
+        "rooks_white": white_rooks,
         "score": {"white": white_score, "black": black_score},
         "turn": current_turn,
         "players": {
@@ -106,15 +112,26 @@ def current_state():
 def reset_positions():
     global black_triangles
     global white_triangles
+    global black_rooks
+    global white_rooks
     global current_turn
 
     black_triangles = [{"x": x, "y": 1} for x in range(8)]
     white_triangles = [{"x": x, "y": 6} for x in range(8)]
+    black_rooks = [{"x": 0, "y": 0}, {"x": 7, "y": 0}]
+    white_rooks = [{"x": 0, "y": 7}, {"x": 7, "y": 7}]
     current_turn = "white"
 
 
 def find_triangle_index(triangles: list, x: int, y: int):
     for idx, t in enumerate(triangles):
+        if t["x"] == x and t["y"] == y:
+            return idx
+    return -1
+
+
+def find_rook_index(rooks: list, x: int, y: int):
+    for idx, t in enumerate(rooks):
         if t["x"] == x and t["y"] == y:
             return idx
     return -1
@@ -133,7 +150,97 @@ def cell_occupied(x: int, y: int, ignore_kind: str = "", ignore_index: int = -1)
         if t["x"] == x and t["y"] == y:
             return True
 
+    for idx, t in enumerate(black_rooks):
+        if ignore_kind == "rook_black" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
+    for idx, t in enumerate(white_rooks):
+        if ignore_kind == "rook_white" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
     return False
+
+
+def get_piece_at(x: int, y: int):
+    for t in black_triangles:
+        if t["x"] == x and t["y"] == y:
+            return "triangle_black"
+
+    for t in white_triangles:
+        if t["x"] == x and t["y"] == y:
+            return "triangle_white"
+
+    for t in black_rooks:
+        if t["x"] == x and t["y"] == y:
+            return "rook_black"
+
+    for t in white_rooks:
+        if t["x"] == x and t["y"] == y:
+            return "rook_white"
+
+    return ""
+
+
+def remove_piece_at(x: int, y: int):
+    idx = find_triangle_index(black_triangles, x, y)
+    if idx != -1:
+        del black_triangles[idx]
+        return "triangle_black"
+
+    idx = find_triangle_index(white_triangles, x, y)
+    if idx != -1:
+        del white_triangles[idx]
+        return "triangle_white"
+
+    idx = find_rook_index(black_rooks, x, y)
+    if idx != -1:
+        del black_rooks[idx]
+        return "rook_black"
+
+    idx = find_rook_index(white_rooks, x, y)
+    if idx != -1:
+        del white_rooks[idx]
+        return "rook_white"
+
+    return ""
+
+
+def path_clear_straight(from_x: int, from_y: int, to_x: int, to_y: int):
+    # Nur gleiche Zeile ODER gleiche Spalte erlaubt.
+    if from_x != to_x and from_y != to_y:
+        return False
+
+    if from_x == to_x and from_y == to_y:
+        return False
+
+    if from_x == to_x:
+        step = 1 if to_y > from_y else -1
+        y = from_y + step
+        while y != to_y:
+            if cell_occupied(from_x, y):
+                print(
+                    "[DEBUG rook-path-blocked]",
+                    {"block_x": from_x, "block_y": y, "from": [from_x, from_y], "to": [to_x, to_y]},
+                )
+                return False
+            y += step
+        return True
+
+    step = 1 if to_x > from_x else -1
+    x = from_x + step
+    while x != to_x:
+        if cell_occupied(x, from_y):
+            print(
+                "[DEBUG rook-path-blocked]",
+                {"block_x": x, "block_y": from_y, "from": [from_x, from_y], "to": [to_x, to_y]},
+            )
+            return False
+        x += step
+    return True
 
 
 @app.get("/join")
@@ -253,9 +360,9 @@ def move(data: dict):
         }
 
     # Zugreihenfolge erzwingen
-    if current_turn == "white" and color != "triangle_white":
+    if current_turn == "white" and color not in ["triangle_white", "rook_white"]:
         message = "Weiß ist am Zug."
-    elif current_turn == "black" and color != "triangle_black":
+    elif current_turn == "black" and color not in ["triangle_black", "rook_black"]:
         message = "Schwarz ist am Zug."
 
     # Schwarzer Bauer: Richtung Gegner (nach unten, y+1)
@@ -353,6 +460,96 @@ def move(data: dict):
                         message = "Weißer Bauer hat geschlagen."
                 else:
                     message = "Ungültiger Zug für weißen Bauern."
+
+    # Schwarzer Turm: horizontal/vertikal, bis vor Hindernis.
+    elif color == "rook_black":
+        if client_id != black_player:
+            message = "Nur der schwarze Spieler darf schwarze Türme bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für schwarzen Turm."
+        else:
+            idx = find_rook_index(black_rooks, from_x, from_y)
+            target_piece = get_piece_at(x, y)
+            print(
+                "[DEBUG rook-black-attempt]",
+                {
+                    "from": [from_x, from_y],
+                    "to": [x, y],
+                    "target_piece": target_piece,
+                    "turn": current_turn,
+                    "client_id": client_id,
+                },
+            )
+            if idx == -1:
+                message = "Schwarzer Turm auf Quellfeld nicht gefunden."
+            elif not path_clear_straight(from_x, from_y, x, y):
+                message = "Turm darf nur waagerecht/senkrecht und nicht durch Figuren ziehen."
+            else:
+                if target_piece in ["triangle_black", "rook_black"]:
+                    print(
+                        "[DEBUG rook-black-rejected-own-piece]",
+                        {"to": [x, y], "target_piece": target_piece},
+                    )
+                    message = "Eigene Figur blockiert das Zielfeld."
+                else:
+                    if target_piece != "":
+                        captured = remove_piece_at(x, y)
+                        print(
+                            "[DEBUG rook-black-capture]",
+                            {"to": [x, y], "captured": captured},
+                        )
+                black_rooks[idx]["x"] = x
+                black_rooks[idx]["y"] = y
+                accepted = True
+                if target_piece == "":
+                    message = "Schwarzer Turm wurde bewegt."
+                else:
+                    message = "Schwarzer Turm hat geschlagen."
+
+    # Weißer Turm: horizontal/vertikal, bis vor Hindernis.
+    elif color == "rook_white":
+        if client_id != white_player:
+            message = "Nur der weiße Spieler darf weiße Türme bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für weißen Turm."
+        else:
+            idx = find_rook_index(white_rooks, from_x, from_y)
+            target_piece = get_piece_at(x, y)
+            print(
+                "[DEBUG rook-white-attempt]",
+                {
+                    "from": [from_x, from_y],
+                    "to": [x, y],
+                    "target_piece": target_piece,
+                    "turn": current_turn,
+                    "client_id": client_id,
+                },
+            )
+            if idx == -1:
+                message = "Weißer Turm auf Quellfeld nicht gefunden."
+            elif not path_clear_straight(from_x, from_y, x, y):
+                message = "Turm darf nur waagerecht/senkrecht und nicht durch Figuren ziehen."
+            else:
+                if target_piece in ["triangle_white", "rook_white"]:
+                    print(
+                        "[DEBUG rook-white-rejected-own-piece]",
+                        {"to": [x, y], "target_piece": target_piece},
+                    )
+                    message = "Eigene Figur blockiert das Zielfeld."
+                else:
+                    if target_piece != "":
+                        captured = remove_piece_at(x, y)
+                        print(
+                            "[DEBUG rook-white-capture]",
+                            {"to": [x, y], "captured": captured},
+                        )
+                white_rooks[idx]["x"] = x
+                white_rooks[idx]["y"] = y
+                accepted = True
+                if target_piece == "":
+                    message = "Weißer Turm wurde bewegt."
+                else:
+                    message = "Weißer Turm hat geschlagen."
 
     else:
         message = "Unbekannte Figur."
