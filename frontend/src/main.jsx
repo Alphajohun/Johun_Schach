@@ -30,6 +30,8 @@ function App() {
   const [rooksWhite, setRooksWhite] = useState([])
   const [knightsBlack, setKnightsBlack] = useState([])
   const [knightsWhite, setKnightsWhite] = useState([])
+  const [bishopsBlack, setBishopsBlack] = useState([])
+  const [bishopsWhite, setBishopsWhite] = useState([])
   const [queensBlack, setQueensBlack] = useState([])
   const [queensWhite, setQueensWhite] = useState([])
   const [score, setScore] = useState({ white: 0, black: 0 })
@@ -54,6 +56,8 @@ function App() {
     if (Array.isArray(data.rooks_white)) setRooksWhite(data.rooks_white)
     if (Array.isArray(data.knights_black)) setKnightsBlack(data.knights_black)
     if (Array.isArray(data.knights_white)) setKnightsWhite(data.knights_white)
+    if (Array.isArray(data.bishops_black)) setBishopsBlack(data.bishops_black)
+    if (Array.isArray(data.bishops_white)) setBishopsWhite(data.bishops_white)
     if (Array.isArray(data.queens_black)) setQueensBlack(data.queens_black)
     if (Array.isArray(data.queens_white)) setQueensWhite(data.queens_white)
     if (data.score) setScore(data.score)
@@ -189,6 +193,8 @@ function App() {
   const hasWhiteRookAt = (x, y) => rooksWhite.findIndex((t) => t.x === x && t.y === y)
   const hasBlackKnightAt = (x, y) => knightsBlack.findIndex((t) => t.x === x && t.y === y)
   const hasWhiteKnightAt = (x, y) => knightsWhite.findIndex((t) => t.x === x && t.y === y)
+  const hasBlackBishopAt = (x, y) => bishopsBlack.findIndex((t) => t.x === x && t.y === y)
+  const hasWhiteBishopAt = (x, y) => bishopsWhite.findIndex((t) => t.x === x && t.y === y)
   const hasBlackQueenAt = (x, y) => queensBlack.findIndex((t) => t.x === x && t.y === y)
   const hasWhiteQueenAt = (x, y) => queensWhite.findIndex((t) => t.x === x && t.y === y)
 
@@ -205,6 +211,8 @@ function App() {
       const whiteRookIndex = hasWhiteRookAt(x, y)
       const blackKnightIndex = hasBlackKnightAt(x, y)
       const whiteKnightIndex = hasWhiteKnightAt(x, y)
+      const blackBishopIndex = hasBlackBishopAt(x, y)
+      const whiteBishopIndex = hasWhiteBishopAt(x, y)
       const blackQueenIndex = hasBlackQueenAt(x, y)
       const whiteQueenIndex = hasWhiteQueenAt(x, y)
 
@@ -212,6 +220,8 @@ function App() {
       const isSelectedWhiteRook = auswahl === 'rook_white' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedBlackKnight = auswahl === 'knight_black' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedWhiteKnight = auswahl === 'knight_white' && selectedFrom?.x === x && selectedFrom?.y === y
+      const isSelectedBlackBishop = auswahl === 'bishop_black' && selectedFrom?.x === x && selectedFrom?.y === y
+      const isSelectedWhiteBishop = auswahl === 'bishop_white' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedBlackQueen = auswahl === 'queen_black' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedWhiteQueen = auswahl === 'queen_white' && selectedFrom?.x === x && selectedFrom?.y === y
 
@@ -333,6 +343,49 @@ function App() {
         )
       }
 
+      if (blackBishopIndex !== -1) {
+        stein = (
+          <div
+            style={{
+              height: `${cellSize}px`,
+              width: `${cellSize}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: `${Math.floor(cellSize * 0.85)}px`,
+              lineHeight: 1,
+              color: '#111',
+              textShadow: isSelectedBlackBishop ? '0 0 4px red' : 'none',
+              userSelect: 'none'
+            }}
+          >
+            ♝
+          </div>
+        )
+      }
+
+      if (whiteBishopIndex !== -1) {
+        stein = (
+          <div
+            style={{
+              height: `${cellSize}px`,
+              width: `${cellSize}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: `${Math.floor(cellSize * 0.85)}px`,
+              lineHeight: 1,
+              color: '#fff',
+              textShadow: isSelectedWhiteBishop ? '0 0 4px red, 0 0 0.5px #000' : '0 0 0.5px #000',
+              WebkitTextStroke: '0.35px #000',
+              userSelect: 'none'
+            }}
+          >
+            ♗
+          </div>
+        )
+      }
+
       if (blackQueenIndex !== -1) {
         stein = (
           <div
@@ -411,7 +464,7 @@ function App() {
             if (blackPawnIndex !== -1) {
               // Wenn ein weißer Bauer bereits ausgewählt ist, soll der gegnerische
               // schwarze Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if ((auswahl === 'pawn_white' || auswahl === 'rook_white' || auswahl === 'knight_white' || auswahl === 'queen_white') && selectedFrom) {
+              if ((auswahl === 'pawn_white' || auswahl === 'rook_white' || auswahl === 'knight_white' || auswahl === 'bishop_white' || auswahl === 'queen_white') && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'black') {
@@ -438,6 +491,8 @@ function App() {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'knight_white' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
+              } else if (auswahl === 'bishop_white' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'queen_white' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
               } else {
@@ -461,7 +516,7 @@ function App() {
             if (whitePawnIndex !== -1) {
               // Wenn ein schwarzer Bauer bereits ausgewählt ist, soll der gegnerische
               // weiße Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if ((auswahl === 'pawn_black' || auswahl === 'rook_black' || auswahl === 'knight_black' || auswahl === 'queen_black') && selectedFrom) {
+              if ((auswahl === 'pawn_black' || auswahl === 'rook_black' || auswahl === 'knight_black' || auswahl === 'bishop_black' || auswahl === 'queen_black') && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'white') {
@@ -487,6 +542,8 @@ function App() {
               } else if (auswahl === 'rook_black' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'knight_black' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
+              } else if (auswahl === 'bishop_black' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'queen_black' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
@@ -515,6 +572,8 @@ function App() {
                 // gegnerisches Pferd als Ziel behandeln
               } else if (auswahl === 'knight_white' && selectedFrom) {
                 // gegnerisches Pferd als Ziel behandeln
+              } else if (auswahl === 'bishop_white' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
               } else if (auswahl === 'queen_white' && selectedFrom) {
                 // gegnerisches Pferd als Ziel behandeln
               } else {
@@ -542,6 +601,8 @@ function App() {
                 // gegnerisches Pferd als Ziel behandeln
               } else if (auswahl === 'knight_black' && selectedFrom) {
                 // gegnerisches Pferd als Ziel behandeln
+              } else if (auswahl === 'bishop_black' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
               } else if (auswahl === 'queen_black' && selectedFrom) {
                 // gegnerisches Pferd als Ziel behandeln
               } else {
@@ -558,6 +619,64 @@ function App() {
                 setAuswahl('knight_white')
                 setSelectedFrom({ x, y })
                 setMeldung('Weißes Pferd ausgewählt.')
+                return
+              }
+            }
+
+            if (blackBishopIndex !== -1) {
+              if (auswahl === 'pawn_white' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'rook_white' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'knight_white' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'bishop_white' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'queen_white' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else {
+                if (rolle !== 'black') {
+                  setAuswahl('')
+                  setSelectedFrom(null)
+                  setMeldung('Nur Schwarz darf schwarze Läufer auswählen.')
+                  return
+                }
+                if (turn !== 'black') {
+                  setMeldung('Schwarz ist gerade nicht am Zug.')
+                  return
+                }
+                setAuswahl('bishop_black')
+                setSelectedFrom({ x, y })
+                setMeldung('Schwarzer Läufer ausgewählt.')
+                return
+              }
+            }
+
+            if (whiteBishopIndex !== -1) {
+              if (auswahl === 'pawn_black' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'rook_black' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'knight_black' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'bishop_black' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'queen_black' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else {
+                if (rolle !== 'white') {
+                  setAuswahl('')
+                  setSelectedFrom(null)
+                  setMeldung('Nur Weiß darf weiße Läufer auswählen.')
+                  return
+                }
+                if (turn !== 'white') {
+                  setMeldung('Weiß ist gerade nicht am Zug.')
+                  return
+                }
+                setAuswahl('bishop_white')
+                setSelectedFrom({ x, y })
+                setMeldung('Weißer Läufer ausgewählt.')
                 return
               }
             }
@@ -630,6 +749,7 @@ function App() {
                 (auswahl === 'pawn_black' || auswahl === 'pawn_white' ||
                   auswahl === 'rook_black' || auswahl === 'rook_white' ||
                   auswahl === 'knight_black' || auswahl === 'knight_white' ||
+                  auswahl === 'bishop_black' || auswahl === 'bishop_white' ||
                   auswahl === 'queen_black' || auswahl === 'queen_white') &&
                 selectedFrom
               ) {

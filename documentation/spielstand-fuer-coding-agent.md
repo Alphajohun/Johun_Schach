@@ -40,6 +40,7 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
   - `black_pawns`, `white_pawns`
   - `black_rooks`, `white_rooks`
   - `black_knights`, `white_knights`
+  - `black_bishops`, `white_bishops`
   - `black_queens`, `white_queens`
 - Score:
   - `white_score`, `black_score`
@@ -62,6 +63,8 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
 - Weiße Türme starten auf `0,7` und `7,7`
 - Schwarze Pferde starten auf `1,0` und `6,0` (b8/g8)
 - Weiße Pferde starten auf `1,7` und `6,7` (b1/g1)
+- Schwarze Läufer starten auf `2,0` und `5,0` (c8/f8)
+- Weiße Läufer starten auf `2,7` und `5,7` (c1/f1)
 - Schwarze Dame startet auf `3,0` (d8)
 - Weiße Dame startet auf `3,7` (d1)
 
@@ -122,7 +125,18 @@ Damenregeln werden für Schwarz und Weiß separat verarbeitet in [`move()`](back
 
 Pfadprüfung nutzt [`path_clear_straight()`](backend/app.py:300) und [`path_clear_diagonal()`](backend/app.py:333).
 
-## 3.7 Rundensystem und Score
+## 3.7 Zugregeln Läufer
+
+Läuferregeln werden für Schwarz und Weiß separat verarbeitet in [`move()`](backend/app.py:730) und [`move()`](backend/app.py:760):
+
+- Nur diagonal (`abs(dx) == abs(dy)`)
+- Keine Bewegung durch Figuren hindurch
+- Eigene Figur auf Zielfeld blockiert
+- Gegnerische Figur auf Zielfeld wird geschlagen
+
+Pfadprüfung erfolgt über [`path_clear_diagonal()`](backend/app.py:333).
+
+## 3.8 Rundensystem und Score
 
 - Es gibt keinen automatischen Siegzustand.
 - Spieler können Runde aktiv aufgeben über `/reset_round`.
