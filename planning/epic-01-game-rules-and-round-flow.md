@@ -28,8 +28,16 @@ Dokumentiert in [`documentation/spielstand-fuer-coding-agent.md`](documentation/
 **Acceptance Criteria**
 
 - Dreiecke können gegnerische Figurtypen entsprechend definierter Regel schlagen
-- Eigene Figuren bleiben grundsätzlich nicht schlagbar
+- Eigene Figuren bleiben grundsätzlich nicht schlagbar - man kann eigene Figuren nicht schlagen
 - Validierung und UI-Meldung sind synchron
+
+Dreiecke heissen ab sofort bauern
+Bauern können diagonal schlagen - ein feld in ihre laufrichtung
+Türme können horizontal und vertikal Figuren schlagen, die nicht durch andere figuren in der sichtlinie verdeckt sind
+figuren können natürlich nur gegnerische figuren schlagen  - das Feld muss besetzt sein
+
+
+
 
 ### Story 01.02 - Explizite Rundengewinn-Bedingung
 

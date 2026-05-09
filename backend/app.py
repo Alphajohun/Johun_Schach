@@ -17,10 +17,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Dreiecke:
+# Bauern:
 # schwarz auf Reihe 2 (y=1), weiß auf Reihe 7 (y=6)
-black_triangles = [{"x": x, "y": 1} for x in range(8)]
-white_triangles = [{"x": x, "y": 6} for x in range(8)]
+black_pawns = [{"x": x, "y": 1} for x in range(8)]
+white_pawns = [{"x": x, "y": 6} for x in range(8)]
 
 # Türme in den Ecken der jeweiligen Seiten
 black_rooks = [{"x": 0, "y": 0}, {"x": 7, "y": 0}]
@@ -94,8 +94,8 @@ def touch_player(client_id: str):
 def current_state():
     cleanup_disconnected_players()
     return {
-        "triangles_black": black_triangles,
-        "triangles_white": white_triangles,
+        "pawns_black": black_pawns,
+        "pawns_white": white_pawns,
         "rooks_black": black_rooks,
         "rooks_white": white_rooks,
         "score": {"white": white_score, "black": black_score},
@@ -110,21 +110,21 @@ def current_state():
 
 
 def reset_positions():
-    global black_triangles
-    global white_triangles
+    global black_pawns
+    global white_pawns
     global black_rooks
     global white_rooks
     global current_turn
 
-    black_triangles = [{"x": x, "y": 1} for x in range(8)]
-    white_triangles = [{"x": x, "y": 6} for x in range(8)]
+    black_pawns = [{"x": x, "y": 1} for x in range(8)]
+    white_pawns = [{"x": x, "y": 6} for x in range(8)]
     black_rooks = [{"x": 0, "y": 0}, {"x": 7, "y": 0}]
     white_rooks = [{"x": 0, "y": 7}, {"x": 7, "y": 7}]
     current_turn = "white"
 
 
-def find_triangle_index(triangles: list, x: int, y: int):
-    for idx, t in enumerate(triangles):
+def find_pawn_index(pawns: list, x: int, y: int):
+    for idx, t in enumerate(pawns):
         if t["x"] == x and t["y"] == y:
             return idx
     return -1
@@ -138,14 +138,14 @@ def find_rook_index(rooks: list, x: int, y: int):
 
 
 def cell_occupied(x: int, y: int, ignore_kind: str = "", ignore_index: int = -1):
-    for idx, t in enumerate(black_triangles):
-        if ignore_kind == "triangle_black" and idx == ignore_index:
+    for idx, t in enumerate(black_pawns):
+        if ignore_kind == "pawn_black" and idx == ignore_index:
             continue
         if t["x"] == x and t["y"] == y:
             return True
 
-    for idx, t in enumerate(white_triangles):
-        if ignore_kind == "triangle_white" and idx == ignore_index:
+    for idx, t in enumerate(white_pawns):
+        if ignore_kind == "pawn_white" and idx == ignore_index:
             continue
         if t["x"] == x and t["y"] == y:
             return True
@@ -166,13 +166,13 @@ def cell_occupied(x: int, y: int, ignore_kind: str = "", ignore_index: int = -1)
 
 
 def get_piece_at(x: int, y: int):
-    for t in black_triangles:
+    for t in black_pawns:
         if t["x"] == x and t["y"] == y:
-            return "triangle_black"
+            return "pawn_black"
 
-    for t in white_triangles:
+    for t in white_pawns:
         if t["x"] == x and t["y"] == y:
-            return "triangle_white"
+            return "pawn_white"
 
     for t in black_rooks:
         if t["x"] == x and t["y"] == y:
@@ -186,15 +186,15 @@ def get_piece_at(x: int, y: int):
 
 
 def remove_piece_at(x: int, y: int):
-    idx = find_triangle_index(black_triangles, x, y)
+    idx = find_pawn_index(black_pawns, x, y)
     if idx != -1:
-        del black_triangles[idx]
-        return "triangle_black"
+        del black_pawns[idx]
+        return "pawn_black"
 
-    idx = find_triangle_index(white_triangles, x, y)
+    idx = find_pawn_index(white_pawns, x, y)
     if idx != -1:
-        del white_triangles[idx]
-        return "triangle_white"
+        del white_pawns[idx]
+        return "pawn_white"
 
     idx = find_rook_index(black_rooks, x, y)
     if idx != -1:
@@ -360,19 +360,19 @@ def move(data: dict):
         }
 
     # Zugreihenfolge erzwingen
-    if current_turn == "white" and color not in ["triangle_white", "rook_white"]:
+    if current_turn == "white" and color not in ["pawn_white", "rook_white"]:
         message = "Weiß ist am Zug."
-    elif current_turn == "black" and color not in ["triangle_black", "rook_black"]:
+    elif current_turn == "black" and color not in ["pawn_black", "rook_black"]:
         message = "Schwarz ist am Zug."
 
     # Schwarzer Bauer: Richtung Gegner (nach unten, y+1)
-    elif color == "triangle_black":
+    elif color == "pawn_black":
         if client_id != black_player:
             message = "Nur der schwarze Spieler darf schwarze Bauern bewegen."
         elif from_x is None or from_y is None:
             message = "Quellfeld fehlt für schwarzen Bauern."
         else:
-            idx = find_triangle_index(black_triangles, from_x, from_y)
+            idx = find_pawn_index(black_pawns, from_x, from_y)
             if idx == -1:
                 message = "Schwarzer Bauer auf Quellfeld nicht gefunden."
             elif from_y == 7:
@@ -388,39 +388,39 @@ def move(data: dict):
                     if cell_occupied(x, y):
                         message = "Vor dem Bauern steht eine Figur."
                     else:
-                        black_triangles[idx]["x"] = x
-                        black_triangles[idx]["y"] = y
+                        black_pawns[idx]["x"] = x
+                        black_pawns[idx]["y"] = y
                         accepted = True
                         message = "Schwarzer Bauer wurde bewegt."
                 elif is_forward_two:
                     if cell_occupied(from_x, one_step_y) or cell_occupied(x, y):
                         message = "Der Zwei-Felder-Zug ist blockiert."
                     else:
-                        black_triangles[idx]["x"] = x
-                        black_triangles[idx]["y"] = y
+                        black_pawns[idx]["x"] = x
+                        black_pawns[idx]["y"] = y
                         accepted = True
                         message = "Schwarzer Bauer wurde 2 Felder bewegt."
                 elif is_capture:
-                    capture_idx = find_triangle_index(white_triangles, x, y)
-                    if capture_idx == -1:
-                        message = "Diagonal kann nur geschlagen werden, wenn dort ein weißer Bauer steht."
+                    target_piece = get_piece_at(x, y)
+                    if target_piece not in ["pawn_white", "rook_white"]:
+                        message = "Diagonal kann nur geschlagen werden, wenn dort eine weiße Figur steht."
                     else:
-                        del white_triangles[capture_idx]
-                        black_triangles[idx]["x"] = x
-                        black_triangles[idx]["y"] = y
+                        remove_piece_at(x, y)
+                        black_pawns[idx]["x"] = x
+                        black_pawns[idx]["y"] = y
                         accepted = True
                         message = "Schwarzer Bauer hat geschlagen."
                 else:
                     message = "Ungültiger Zug für schwarzen Bauern."
 
     # Weißer Bauer: Richtung Gegner (nach oben, y-1)
-    elif color == "triangle_white":
+    elif color == "pawn_white":
         if client_id != white_player:
             message = "Nur der weiße Spieler darf weiße Bauern bewegen."
         elif from_x is None or from_y is None:
             message = "Quellfeld fehlt für weißen Bauern."
         else:
-            idx = find_triangle_index(white_triangles, from_x, from_y)
+            idx = find_pawn_index(white_pawns, from_x, from_y)
             if idx == -1:
                 message = "Weißer Bauer auf Quellfeld nicht gefunden."
             elif from_y == 0:
@@ -436,26 +436,26 @@ def move(data: dict):
                     if cell_occupied(x, y):
                         message = "Vor dem Bauern steht eine Figur."
                     else:
-                        white_triangles[idx]["x"] = x
-                        white_triangles[idx]["y"] = y
+                        white_pawns[idx]["x"] = x
+                        white_pawns[idx]["y"] = y
                         accepted = True
                         message = "Weißer Bauer wurde bewegt."
                 elif is_forward_two:
                     if cell_occupied(from_x, one_step_y) or cell_occupied(x, y):
                         message = "Der Zwei-Felder-Zug ist blockiert."
                     else:
-                        white_triangles[idx]["x"] = x
-                        white_triangles[idx]["y"] = y
+                        white_pawns[idx]["x"] = x
+                        white_pawns[idx]["y"] = y
                         accepted = True
                         message = "Weißer Bauer wurde 2 Felder bewegt."
                 elif is_capture:
-                    capture_idx = find_triangle_index(black_triangles, x, y)
-                    if capture_idx == -1:
-                        message = "Diagonal kann nur geschlagen werden, wenn dort ein schwarzer Bauer steht."
+                    target_piece = get_piece_at(x, y)
+                    if target_piece not in ["pawn_black", "rook_black"]:
+                        message = "Diagonal kann nur geschlagen werden, wenn dort eine schwarze Figur steht."
                     else:
-                        del black_triangles[capture_idx]
-                        white_triangles[idx]["x"] = x
-                        white_triangles[idx]["y"] = y
+                        remove_piece_at(x, y)
+                        white_pawns[idx]["x"] = x
+                        white_pawns[idx]["y"] = y
                         accepted = True
                         message = "Weißer Bauer hat geschlagen."
                 else:
@@ -485,7 +485,7 @@ def move(data: dict):
             elif not path_clear_straight(from_x, from_y, x, y):
                 message = "Turm darf nur waagerecht/senkrecht und nicht durch Figuren ziehen."
             else:
-                if target_piece in ["triangle_black", "rook_black"]:
+                if target_piece in ["pawn_black", "rook_black"]:
                     print(
                         "[DEBUG rook-black-rejected-own-piece]",
                         {"to": [x, y], "target_piece": target_piece},
@@ -530,7 +530,7 @@ def move(data: dict):
             elif not path_clear_straight(from_x, from_y, x, y):
                 message = "Turm darf nur waagerecht/senkrecht und nicht durch Figuren ziehen."
             else:
-                if target_piece in ["triangle_white", "rook_white"]:
+                if target_piece in ["pawn_white", "rook_white"]:
                     print(
                         "[DEBUG rook-white-rejected-own-piece]",
                         {"to": [x, y], "target_piece": target_piece},

@@ -17,8 +17,8 @@ function createOrGetClientId() {
 }
 
 function App() {
-  const [trianglesBlack, setTrianglesBlack] = useState([])
-  const [trianglesWhite, setTrianglesWhite] = useState([])
+  const [pawnsBlack, setPawnsBlack] = useState([])
+  const [pawnsWhite, setPawnsWhite] = useState([])
   const [rooksBlack, setRooksBlack] = useState([])
   const [rooksWhite, setRooksWhite] = useState([])
   const [score, setScore] = useState({ white: 0, black: 0 })
@@ -37,8 +37,8 @@ function App() {
   const gameReady = players.white_taken && players.black_taken
 
   const applyStateFromServer = (data) => {
-    if (Array.isArray(data.triangles_black)) setTrianglesBlack(data.triangles_black)
-    if (Array.isArray(data.triangles_white)) setTrianglesWhite(data.triangles_white)
+    if (Array.isArray(data.pawns_black)) setPawnsBlack(data.pawns_black)
+    if (Array.isArray(data.pawns_white)) setPawnsWhite(data.pawns_white)
     if (Array.isArray(data.rooks_black)) setRooksBlack(data.rooks_black)
     if (Array.isArray(data.rooks_white)) setRooksWhite(data.rooks_white)
     if (data.score) setScore(data.score)
@@ -162,8 +162,8 @@ function App() {
       rolle === 'black' ? 'Schwarz' :
         rolle === 'loading' ? 'Lade...' : 'Zuschauer'
 
-  const hasBlackTriangleAt = (x, y) => trianglesBlack.findIndex((t) => t.x === x && t.y === y)
-  const hasWhiteTriangleAt = (x, y) => trianglesWhite.findIndex((t) => t.x === x && t.y === y)
+  const hasBlackPawnAt = (x, y) => pawnsBlack.findIndex((t) => t.x === x && t.y === y)
+  const hasWhitePawnAt = (x, y) => pawnsWhite.findIndex((t) => t.x === x && t.y === y)
   const hasBlackRookAt = (x, y) => rooksBlack.findIndex((t) => t.x === x && t.y === y)
   const hasWhiteRookAt = (x, y) => rooksWhite.findIndex((t) => t.x === x && t.y === y)
 
@@ -174,16 +174,16 @@ function App() {
       const farbe = (x + y) % 2 === 0 ? '#f0d9b5' : '#b58863'
       let stein = null
 
-      const blackTriangleIndex = hasBlackTriangleAt(x, y)
-      const whiteTriangleIndex = hasWhiteTriangleAt(x, y)
+      const blackPawnIndex = hasBlackPawnAt(x, y)
+      const whitePawnIndex = hasWhitePawnAt(x, y)
       const blackRookIndex = hasBlackRookAt(x, y)
       const whiteRookIndex = hasWhiteRookAt(x, y)
 
       const isSelectedBlackRook = auswahl === 'rook_black' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedWhiteRook = auswahl === 'rook_white' && selectedFrom?.x === x && selectedFrom?.y === y
 
-      if (blackTriangleIndex !== -1) {
-        const isSelected = auswahl === 'triangle_black' && selectedFrom?.x === x && selectedFrom?.y === y
+      if (blackPawnIndex !== -1) {
+        const isSelected = auswahl === 'pawn_black' && selectedFrom?.x === x && selectedFrom?.y === y
         stein = (
           <div
             style={{
@@ -198,8 +198,8 @@ function App() {
         )
       }
 
-      if (whiteTriangleIndex !== -1) {
-        const isSelected = auswahl === 'triangle_white' && selectedFrom?.x === x && selectedFrom?.y === y
+      if (whitePawnIndex !== -1) {
+        const isSelected = auswahl === 'pawn_white' && selectedFrom?.x === x && selectedFrom?.y === y
         stein = (
           <div
             style={{
@@ -269,51 +269,51 @@ function App() {
             }
 
             // DEBUG-LOG: möglicher Schlag-Bug, wenn Zielfeld mit Gegnerbauer angeklickt wird.
-            if (auswahl === 'triangle_white' && selectedFrom && blackTriangleIndex !== -1) {
+            if (auswahl === 'pawn_white' && selectedFrom && blackPawnIndex !== -1) {
               console.info('[DEBUG capture-intent blocked?] white selected pawn clicked black-occupied target', {
                 selectedFrom,
                 target: { x, y },
-                blackTriangleIndex,
+                blackPawnIndex,
                 role: rolle,
                 turn
               })
             }
 
-            if (auswahl === 'triangle_black' && selectedFrom && whiteTriangleIndex !== -1) {
+            if (auswahl === 'pawn_black' && selectedFrom && whitePawnIndex !== -1) {
               console.info('[DEBUG capture-intent blocked?] black selected pawn clicked white-occupied target', {
                 selectedFrom,
                 target: { x, y },
-                whiteTriangleIndex,
+                whitePawnIndex,
                 role: rolle,
                 turn
               })
             }
 
-            if (blackTriangleIndex !== -1) {
+            if (blackPawnIndex !== -1) {
               // Wenn ein weißer Bauer bereits ausgewählt ist, soll der gegnerische
               // schwarze Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if (auswahl === 'triangle_white' && selectedFrom) {
+              if (auswahl === 'pawn_white' && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'black') {
                 setAuswahl('')
                 setSelectedFrom(null)
-                setMeldung('Nur Schwarz darf schwarze Dreiecke auswählen.')
+                setMeldung('Nur Schwarz darf schwarze Bauern auswählen.')
                 return
               }
               if (turn !== 'black') {
                 setMeldung('Schwarz ist gerade nicht am Zug.')
                 return
               }
-              setAuswahl('triangle_black')
+              setAuswahl('pawn_black')
               setSelectedFrom({ x, y })
-              setMeldung('Schwarzes Dreieck ausgewählt.')
+              setMeldung('Schwarzer Bauer ausgewählt.')
               return
               }
             }
 
             if (blackRookIndex !== -1) {
-              if (auswahl === 'triangle_white' && selectedFrom) {
+              if (auswahl === 'pawn_white' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'rook_white' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
@@ -335,31 +335,31 @@ function App() {
               }
             }
 
-            if (whiteTriangleIndex !== -1) {
+            if (whitePawnIndex !== -1) {
               // Wenn ein schwarzer Bauer bereits ausgewählt ist, soll der gegnerische
               // weiße Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if (auswahl === 'triangle_black' && selectedFrom) {
+              if (auswahl === 'pawn_black' && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'white') {
                 setAuswahl('')
                 setSelectedFrom(null)
-                setMeldung('Nur Weiß darf weiße Dreiecke auswählen.')
+                setMeldung('Nur Weiß darf weiße Bauern auswählen.')
                 return
               }
               if (turn !== 'white') {
                 setMeldung('Weiß ist gerade nicht am Zug.')
                 return
               }
-              setAuswahl('triangle_white')
+              setAuswahl('pawn_white')
               setSelectedFrom({ x, y })
-              setMeldung('Weißes Dreieck ausgewählt.')
+              setMeldung('Weißer Bauer ausgewählt.')
               return
               }
             }
 
             if (whiteRookIndex !== -1) {
-              if (auswahl === 'triangle_black' && selectedFrom) {
+              if (auswahl === 'pawn_black' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'rook_black' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
@@ -392,7 +392,7 @@ function App() {
               }
 
               if (
-                (auswahl === 'triangle_black' || auswahl === 'triangle_white' ||
+                (auswahl === 'pawn_black' || auswahl === 'pawn_white' ||
                   auswahl === 'rook_black' || auswahl === 'rook_white') &&
                 selectedFrom
               ) {

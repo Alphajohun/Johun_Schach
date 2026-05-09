@@ -37,7 +37,7 @@ flowchart TD
 Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20):
 
 - Figuren:
-  - `black_triangles`, `white_triangles`
+  - `black_pawns`, `white_pawns`
   - `black_rooks`, `white_rooks`
 - Score:
   - `white_score`, `black_score`
@@ -54,8 +54,8 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
 ## 3.1 Brett und Startaufstellung
 
 - Brett: 8x8 mit Koordinaten `x=0..7`, `y=0..7`
-- Schwarze Dreiecke starten auf `y=1`
-- Weiße Dreiecke starten auf `y=6`
+- Schwarze Bauern starten auf `y=1`
+- Weiße Bauern starten auf `y=6`
 - Schwarze Türme starten auf `0,0` und `7,0`
 - Weiße Türme starten auf `0,7` und `7,7`
 
@@ -69,19 +69,19 @@ Quelle: [`reset_positions()`](backend/app.py:112).
 
 Quelle: Turn-Checks in [`move()`](backend/app.py:328) und Toggle in [`move()`](backend/app.py:557).
 
-## 3.3 Zugregeln Dreiecke
+## 3.3 Zugregeln Bauern
 
-Schwarzes Dreieck in [`triangle_black`-Zweig](backend/app.py:369):
+Schwarzer Bauer in [`pawn_black`-Zweig](backend/app.py:369):
 - Vorwärts 1 Feld (`y+1`) wenn frei
 - Initial optional 2 Felder von Startreihe `y=1`, wenn Zwischenfeld und Ziel frei
-- Diagonal schlagen nur auf weiße **Dreiecke**
+- Diagonal schlagen auf jede weiße Figur (`pawn_white` oder `rook_white`)
 
-Weißes Dreieck in [`triangle_white`-Zweig](backend/app.py:417):
+Weißer Bauer in [`pawn_white`-Zweig](backend/app.py:417):
 - Vorwärts 1 Feld (`y-1`) wenn frei
 - Initial optional 2 Felder von Startreihe `y=6`, wenn Zwischenfeld und Ziel frei
-- Diagonal schlagen nur auf schwarze **Dreiecke**
+- Diagonal schlagen auf jede schwarze Figur (`pawn_black` oder `rook_black`)
 
-Wichtig: Dreiecke können im aktuellen Stand **keine Türme schlagen**, da Capture-Prüfung auf gegnerische Dreieckslisten begrenzt ist.
+Wichtig: Bauern schlagen weiterhin nur diagonal vorwärts um 1 Feld, aber auf alle gegnerischen Figurtypen am Zielfeld.
 
 ## 3.4 Zugregeln Türme
 
@@ -192,8 +192,8 @@ GET /join?client_id=abc-123&desired_role=white
   "role": "white",
   "desired_role": "white",
   "assignment": "assigned",
-  "triangles_black": [{ "x": 0, "y": 1 }],
-  "triangles_white": [{ "x": 0, "y": 6 }],
+  "pawns_black": [{ "x": 0, "y": 1 }],
+  "pawns_white": [{ "x": 0, "y": 6 }],
   "rooks_black": [{ "x": 0, "y": 0 }, { "x": 7, "y": 0 }],
   "rooks_white": [{ "x": 0, "y": 7 }, { "x": 7, "y": 7 }],
   "score": { "white": 0, "black": 0 },
@@ -233,8 +233,8 @@ Content-Type: application/json
 {
   "accepted": true,
   "message": "Spieler ausgeloggt.",
-  "triangles_black": [{ "x": 0, "y": 1 }],
-  "triangles_white": [{ "x": 0, "y": 6 }],
+  "pawns_black": [{ "x": 0, "y": 1 }],
+  "pawns_white": [{ "x": 0, "y": 6 }],
   "rooks_black": [{ "x": 0, "y": 0 }, { "x": 7, "y": 0 }],
   "rooks_white": [{ "x": 0, "y": 7 }, { "x": 7, "y": 7 }],
   "score": { "white": 0, "black": 0 },
@@ -286,8 +286,8 @@ GET /state?client_id=abc-123&t=1712345678901
 
 ```json
 {
-  "triangles_black": [{ "x": 0, "y": 1 }],
-  "triangles_white": [{ "x": 0, "y": 6 }],
+  "pawns_black": [{ "x": 0, "y": 1 }],
+  "pawns_white": [{ "x": 0, "y": 6 }],
   "rooks_black": [{ "x": 0, "y": 0 }, { "x": 7, "y": 0 }],
   "rooks_white": [{ "x": 0, "y": 7 }, { "x": 7, "y": 7 }],
   "score": { "white": 0, "black": 0 },
@@ -310,8 +310,8 @@ Body-Felder:
 - `color` string, erforderlich
 - `x` int, Ziel x
 - `y` int, Ziel y
-- `from_x` int, für Dreiecke und Türme effektiv erforderlich
-- `from_y` int, für Dreiecke und Türme effektiv erforderlich
+- `from_x` int, für Bauern und Türme effektiv erforderlich
+- `from_y` int, für Bauern und Türme effektiv erforderlich
 
 Implementierung: [`move()`](backend/app.py:328).
 
@@ -323,7 +323,7 @@ Content-Type: application/json
 
 {
   "client_id": "abc-123",
-  "color": "triangle_white",
+  "color": "pawn_white",
   "from_x": 4,
   "from_y": 6,
   "x": 4,
@@ -337,8 +337,8 @@ Content-Type: application/json
 {
   "accepted": true,
   "message": "Weißer Bauer wurde 2 Felder bewegt.",
-  "triangles_black": [{ "x": 0, "y": 1 }],
-  "triangles_white": [{ "x": 4, "y": 4 }],
+  "pawns_black": [{ "x": 0, "y": 1 }],
+  "pawns_white": [{ "x": 4, "y": 4 }],
   "rooks_black": [{ "x": 0, "y": 0 }, { "x": 7, "y": 0 }],
   "rooks_white": [{ "x": 0, "y": 7 }, { "x": 7, "y": 7 }],
   "score": { "white": 0, "black": 0 },
@@ -358,8 +358,8 @@ Content-Type: application/json
 {
   "accepted": false,
   "message": "Spiel startet erst, wenn Weiß und Schwarz besetzt sind.",
-  "triangles_black": [{ "x": 0, "y": 1 }],
-  "triangles_white": [{ "x": 0, "y": 6 }],
+  "pawns_black": [{ "x": 0, "y": 1 }],
+  "pawns_white": [{ "x": 0, "y": 6 }],
   "rooks_black": [{ "x": 0, "y": 0 }, { "x": 7, "y": 0 }],
   "rooks_white": [{ "x": 0, "y": 7 }, { "x": 7, "y": 7 }],
   "score": { "white": 0, "black": 0 },
@@ -399,8 +399,8 @@ Content-Type: application/json
 {
   "accepted": true,
   "message": "Runde zurückgesetzt. Punkt für Schwarz.",
-  "triangles_black": [{ "x": 0, "y": 1 }],
-  "triangles_white": [{ "x": 0, "y": 6 }],
+  "pawns_black": [{ "x": 0, "y": 1 }],
+  "pawns_white": [{ "x": 0, "y": 6 }],
   "rooks_black": [{ "x": 0, "y": 0 }, { "x": 7, "y": 0 }],
   "rooks_white": [{ "x": 0, "y": 7 }, { "x": 7, "y": 7 }],
   "score": { "white": 0, "black": 1 },
