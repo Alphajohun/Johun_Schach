@@ -30,6 +30,10 @@ white_rooks = [{"x": 0, "y": 7}, {"x": 7, "y": 7}]
 black_knights = [{"x": 1, "y": 0}, {"x": 6, "y": 0}]
 white_knights = [{"x": 1, "y": 7}, {"x": 6, "y": 7}]
 
+# Damen auf d8 (schwarz) und d1 (weiß)
+black_queens = [{"x": 3, "y": 0}]
+white_queens = [{"x": 3, "y": 7}]
+
 # Punkte-Stand
 white_score = 0
 black_score = 0
@@ -104,6 +108,8 @@ def current_state():
         "rooks_white": white_rooks,
         "knights_black": black_knights,
         "knights_white": white_knights,
+        "queens_black": black_queens,
+        "queens_white": white_queens,
         "score": {"white": white_score, "black": black_score},
         "turn": current_turn,
         "players": {
@@ -122,6 +128,8 @@ def reset_positions():
     global white_rooks
     global black_knights
     global white_knights
+    global black_queens
+    global white_queens
     global current_turn
 
     black_pawns = [{"x": x, "y": 1} for x in range(8)]
@@ -130,6 +138,8 @@ def reset_positions():
     white_rooks = [{"x": 0, "y": 7}, {"x": 7, "y": 7}]
     black_knights = [{"x": 1, "y": 0}, {"x": 6, "y": 0}]
     white_knights = [{"x": 1, "y": 7}, {"x": 6, "y": 7}]
+    black_queens = [{"x": 3, "y": 0}]
+    white_queens = [{"x": 3, "y": 7}]
     current_turn = "white"
 
 
@@ -149,6 +159,13 @@ def find_rook_index(rooks: list, x: int, y: int):
 
 def find_knight_index(knights: list, x: int, y: int):
     for idx, t in enumerate(knights):
+        if t["x"] == x and t["y"] == y:
+            return idx
+    return -1
+
+
+def find_queen_index(queens: list, x: int, y: int):
+    for idx, t in enumerate(queens):
         if t["x"] == x and t["y"] == y:
             return idx
     return -1
@@ -191,6 +208,18 @@ def cell_occupied(x: int, y: int, ignore_kind: str = "", ignore_index: int = -1)
         if t["x"] == x and t["y"] == y:
             return True
 
+    for idx, t in enumerate(black_queens):
+        if ignore_kind == "queen_black" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
+    for idx, t in enumerate(white_queens):
+        if ignore_kind == "queen_white" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
     return False
 
 
@@ -218,6 +247,14 @@ def get_piece_at(x: int, y: int):
     for t in white_knights:
         if t["x"] == x and t["y"] == y:
             return "knight_white"
+
+    for t in black_queens:
+        if t["x"] == x and t["y"] == y:
+            return "queen_black"
+
+    for t in white_queens:
+        if t["x"] == x and t["y"] == y:
+            return "queen_white"
 
     return ""
 
@@ -253,6 +290,16 @@ def remove_piece_at(x: int, y: int):
         del white_knights[idx]
         return "knight_white"
 
+    idx = find_queen_index(black_queens, x, y)
+    if idx != -1:
+        del black_queens[idx]
+        return "queen_black"
+
+    idx = find_queen_index(white_queens, x, y)
+    if idx != -1:
+        del white_queens[idx]
+        return "queen_white"
+
     return ""
 
 
@@ -287,6 +334,28 @@ def path_clear_straight(from_x: int, from_y: int, to_x: int, to_y: int):
             )
             return False
         x += step
+    return True
+
+
+def path_clear_diagonal(from_x: int, from_y: int, to_x: int, to_y: int):
+    dx = to_x - from_x
+    dy = to_y - from_y
+
+    if dx == 0 and dy == 0:
+        return False
+
+    if abs(dx) != abs(dy):
+        return False
+
+    step_x = 1 if dx > 0 else -1
+    step_y = 1 if dy > 0 else -1
+    x = from_x + step_x
+    y = from_y + step_y
+    while x != to_x and y != to_y:
+        if cell_occupied(x, y):
+            return False
+        x += step_x
+        y += step_y
     return True
 
 
@@ -407,9 +476,9 @@ def move(data: dict):
         }
 
     # Zugreihenfolge erzwingen
-    if current_turn == "white" and color not in ["pawn_white", "rook_white", "knight_white"]:
+    if current_turn == "white" and color not in ["pawn_white", "rook_white", "knight_white", "queen_white"]:
         message = "Weiß ist am Zug."
-    elif current_turn == "black" and color not in ["pawn_black", "rook_black", "knight_black"]:
+    elif current_turn == "black" and color not in ["pawn_black", "rook_black", "knight_black", "queen_black"]:
         message = "Schwarz ist am Zug."
 
     # Schwarzer Bauer: Richtung Gegner (nach unten, y+1)
@@ -449,7 +518,7 @@ def move(data: dict):
                         message = "Schwarzer Bauer wurde 2 Felder bewegt."
                 elif is_capture:
                     target_piece = get_piece_at(x, y)
-                    if target_piece not in ["pawn_white", "rook_white", "knight_white"]:
+                    if target_piece not in ["pawn_white", "rook_white", "knight_white", "queen_white"]:
                         message = "Diagonal kann nur geschlagen werden, wenn dort eine weiße Figur steht."
                     else:
                         remove_piece_at(x, y)
@@ -497,7 +566,7 @@ def move(data: dict):
                         message = "Weißer Bauer wurde 2 Felder bewegt."
                 elif is_capture:
                     target_piece = get_piece_at(x, y)
-                    if target_piece not in ["pawn_black", "rook_black", "knight_black"]:
+                    if target_piece not in ["pawn_black", "rook_black", "knight_black", "queen_black"]:
                         message = "Diagonal kann nur geschlagen werden, wenn dort eine schwarze Figur steht."
                     else:
                         remove_piece_at(x, y)
@@ -532,7 +601,7 @@ def move(data: dict):
             elif not path_clear_straight(from_x, from_y, x, y):
                 message = "Turm darf nur waagerecht/senkrecht und nicht durch Figuren ziehen."
             else:
-                if target_piece in ["pawn_black", "rook_black"]:
+                if target_piece in ["pawn_black", "rook_black", "knight_black", "queen_black"]:
                     print(
                         "[DEBUG rook-black-rejected-own-piece]",
                         {"to": [x, y], "target_piece": target_piece},
@@ -577,7 +646,7 @@ def move(data: dict):
             elif not path_clear_straight(from_x, from_y, x, y):
                 message = "Turm darf nur waagerecht/senkrecht und nicht durch Figuren ziehen."
             else:
-                if target_piece in ["pawn_white", "rook_white"]:
+                if target_piece in ["pawn_white", "rook_white", "knight_white", "queen_white"]:
                     print(
                         "[DEBUG rook-white-rejected-own-piece]",
                         {"to": [x, y], "target_piece": target_piece},
@@ -616,7 +685,7 @@ def move(data: dict):
                     message = "Pferd muss im L ziehen (2+1)."
                 else:
                     target_piece = get_piece_at(x, y)
-                    if target_piece in ["pawn_black", "rook_black", "knight_black"]:
+                    if target_piece in ["pawn_black", "rook_black", "knight_black", "queen_black"]:
                         message = "Eigene Figur blockiert das Zielfeld."
                     else:
                         if target_piece != "":
@@ -646,7 +715,7 @@ def move(data: dict):
                     message = "Pferd muss im L ziehen (2+1)."
                 else:
                     target_piece = get_piece_at(x, y)
-                    if target_piece in ["pawn_white", "rook_white", "knight_white"]:
+                    if target_piece in ["pawn_white", "rook_white", "knight_white", "queen_white"]:
                         message = "Eigene Figur blockiert das Zielfeld."
                     else:
                         if target_piece != "":
@@ -656,6 +725,64 @@ def move(data: dict):
                             message = "Weißes Pferd wurde bewegt."
                         white_knights[idx]["x"] = x
                         white_knights[idx]["y"] = y
+                        accepted = True
+
+    # Schwarze Dame: wie Turm + Läufer
+    elif color == "queen_black":
+        if client_id != black_player:
+            message = "Nur der schwarze Spieler darf schwarze Damen bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für schwarze Dame."
+        else:
+            idx = find_queen_index(black_queens, from_x, from_y)
+            if idx == -1:
+                message = "Schwarze Dame auf Quellfeld nicht gefunden."
+            else:
+                is_straight = path_clear_straight(from_x, from_y, x, y)
+                is_diagonal = path_clear_diagonal(from_x, from_y, x, y)
+                if not is_straight and not is_diagonal:
+                    message = "Dame darf nur waagerecht, senkrecht oder diagonal ziehen und nicht durch Figuren ziehen."
+                else:
+                    target_piece = get_piece_at(x, y)
+                    if target_piece in ["pawn_black", "rook_black", "knight_black", "queen_black"]:
+                        message = "Eigene Figur blockiert das Zielfeld."
+                    else:
+                        if target_piece != "":
+                            remove_piece_at(x, y)
+                            message = "Schwarze Dame hat geschlagen."
+                        else:
+                            message = "Schwarze Dame wurde bewegt."
+                        black_queens[idx]["x"] = x
+                        black_queens[idx]["y"] = y
+                        accepted = True
+
+    # Weiße Dame: wie Turm + Läufer
+    elif color == "queen_white":
+        if client_id != white_player:
+            message = "Nur der weiße Spieler darf weiße Damen bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für weiße Dame."
+        else:
+            idx = find_queen_index(white_queens, from_x, from_y)
+            if idx == -1:
+                message = "Weiße Dame auf Quellfeld nicht gefunden."
+            else:
+                is_straight = path_clear_straight(from_x, from_y, x, y)
+                is_diagonal = path_clear_diagonal(from_x, from_y, x, y)
+                if not is_straight and not is_diagonal:
+                    message = "Dame darf nur waagerecht, senkrecht oder diagonal ziehen und nicht durch Figuren ziehen."
+                else:
+                    target_piece = get_piece_at(x, y)
+                    if target_piece in ["pawn_white", "rook_white", "knight_white", "queen_white"]:
+                        message = "Eigene Figur blockiert das Zielfeld."
+                    else:
+                        if target_piece != "":
+                            remove_piece_at(x, y)
+                            message = "Weiße Dame hat geschlagen."
+                        else:
+                            message = "Weiße Dame wurde bewegt."
+                        white_queens[idx]["x"] = x
+                        white_queens[idx]["y"] = y
                         accepted = True
 
     else:

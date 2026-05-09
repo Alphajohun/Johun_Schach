@@ -40,6 +40,7 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
   - `black_pawns`, `white_pawns`
   - `black_rooks`, `white_rooks`
   - `black_knights`, `white_knights`
+  - `black_queens`, `white_queens`
 - Score:
   - `white_score`, `black_score`
 - Turn:
@@ -61,6 +62,8 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
 - Weiße Türme starten auf `0,7` und `7,7`
 - Schwarze Pferde starten auf `1,0` und `6,0` (b8/g8)
 - Weiße Pferde starten auf `1,7` und `6,7` (b1/g1)
+- Schwarze Dame startet auf `3,0` (d8)
+- Weiße Dame startet auf `3,7` (d1)
 
 Quelle: [`reset_positions()`](backend/app.py:112).
 
@@ -107,7 +110,19 @@ Pferdregeln werden für Schwarz und Weiß separat verarbeitet in [`move()`](back
 - Eigene Figur auf Zielfeld blockiert
 - Gegnerische Figur auf Zielfeld wird geschlagen
 
-## 3.6 Rundensystem und Score
+## 3.6 Zugregeln Damen
+
+Damenregeln werden für Schwarz und Weiß separat verarbeitet in [`move()`](backend/app.py:706) und [`move()`](backend/app.py:736):
+
+- Dame kombiniert Turm- und Läuferbewegung
+- Erlaubt sind waagerechte, senkrechte oder diagonale Züge
+- Keine Bewegung durch Figuren hindurch
+- Eigene Figur auf Zielfeld blockiert
+- Gegnerische Figur auf Zielfeld wird geschlagen
+
+Pfadprüfung nutzt [`path_clear_straight()`](backend/app.py:300) und [`path_clear_diagonal()`](backend/app.py:333).
+
+## 3.7 Rundensystem und Score
 
 - Es gibt keinen automatischen Siegzustand.
 - Spieler können Runde aktiv aufgeben über `/reset_round`.
