@@ -17,10 +17,19 @@ function createOrGetClientId() {
 }
 
 function App() {
+  const calcCellSize = () => {
+    const maxBoardWidth = Math.max(280, window.innerWidth - 24)
+    return Math.max(34, Math.min(60, Math.floor(maxBoardWidth / 8)))
+  }
+
+  const [cellSize, setCellSize] = useState(calcCellSize())
+
   const [pawnsBlack, setPawnsBlack] = useState([])
   const [pawnsWhite, setPawnsWhite] = useState([])
   const [rooksBlack, setRooksBlack] = useState([])
   const [rooksWhite, setRooksWhite] = useState([])
+  const [knightsBlack, setKnightsBlack] = useState([])
+  const [knightsWhite, setKnightsWhite] = useState([])
   const [score, setScore] = useState({ white: 0, black: 0 })
   const [turn, setTurn] = useState('white')
 
@@ -41,6 +50,8 @@ function App() {
     if (Array.isArray(data.pawns_white)) setPawnsWhite(data.pawns_white)
     if (Array.isArray(data.rooks_black)) setRooksBlack(data.rooks_black)
     if (Array.isArray(data.rooks_white)) setRooksWhite(data.rooks_white)
+    if (Array.isArray(data.knights_black)) setKnightsBlack(data.knights_black)
+    if (Array.isArray(data.knights_white)) setKnightsWhite(data.knights_white)
     if (data.score) setScore(data.score)
     if (data.turn) setTurn(data.turn)
     if (data.players) {
@@ -72,6 +83,12 @@ function App() {
       setMeldung('Backend nicht erreichbar. Bitte starte den Server auf Port 8000.')
     }
   }
+
+  useEffect(() => {
+    const onResize = () => setCellSize(calcCellSize())
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -166,6 +183,8 @@ function App() {
   const hasWhitePawnAt = (x, y) => pawnsWhite.findIndex((t) => t.x === x && t.y === y)
   const hasBlackRookAt = (x, y) => rooksBlack.findIndex((t) => t.x === x && t.y === y)
   const hasWhiteRookAt = (x, y) => rooksWhite.findIndex((t) => t.x === x && t.y === y)
+  const hasBlackKnightAt = (x, y) => knightsBlack.findIndex((t) => t.x === x && t.y === y)
+  const hasWhiteKnightAt = (x, y) => knightsWhite.findIndex((t) => t.x === x && t.y === y)
 
   const felder = []
 
@@ -178,9 +197,13 @@ function App() {
       const whitePawnIndex = hasWhitePawnAt(x, y)
       const blackRookIndex = hasBlackRookAt(x, y)
       const whiteRookIndex = hasWhiteRookAt(x, y)
+      const blackKnightIndex = hasBlackKnightAt(x, y)
+      const whiteKnightIndex = hasWhiteKnightAt(x, y)
 
       const isSelectedBlackRook = auswahl === 'rook_black' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedWhiteRook = auswahl === 'rook_white' && selectedFrom?.x === x && selectedFrom?.y === y
+      const isSelectedBlackKnight = auswahl === 'knight_black' && selectedFrom?.x === x && selectedFrom?.y === y
+      const isSelectedWhiteKnight = auswahl === 'knight_white' && selectedFrom?.x === x && selectedFrom?.y === y
 
       if (blackPawnIndex !== -1) {
         const isSelected = auswahl === 'pawn_black' && selectedFrom?.x === x && selectedFrom?.y === y
@@ -189,9 +212,9 @@ function App() {
             style={{
               width: 0,
               height: 0,
-              borderLeft: '18px solid transparent',
-              borderRight: '18px solid transparent',
-              borderBottom: '30px solid black',
+              borderLeft: `${Math.floor(cellSize * 0.3)}px solid transparent`,
+              borderRight: `${Math.floor(cellSize * 0.3)}px solid transparent`,
+              borderBottom: `${Math.floor(cellSize * 0.5)}px solid black`,
               filter: isSelected ? 'drop-shadow(0 0 4px red)' : 'none'
             }}
           />
@@ -205,9 +228,9 @@ function App() {
             style={{
               width: 0,
               height: 0,
-              borderLeft: '18px solid transparent',
-              borderRight: '18px solid transparent',
-              borderBottom: '30px solid #fff',
+              borderLeft: `${Math.floor(cellSize * 0.3)}px solid transparent`,
+              borderRight: `${Math.floor(cellSize * 0.3)}px solid transparent`,
+              borderBottom: `${Math.floor(cellSize * 0.5)}px solid #fff`,
               filter: isSelected ? 'drop-shadow(0 0 4px red)' : 'drop-shadow(0 0 0.5px #000)'
             }}
           />
@@ -218,12 +241,12 @@ function App() {
         stein = (
           <div
             style={{
-              width: '60px',
-              height: '60px',
+              height: `${cellSize}px`,
+              width: `${cellSize}px`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '52px',
+              fontSize: `${Math.floor(cellSize * 0.85)}px`,
               lineHeight: 1,
               color: '#111',
               textShadow: isSelectedBlackRook ? '0 0 4px red' : 'none',
@@ -239,12 +262,12 @@ function App() {
         stein = (
           <div
             style={{
-              width: '60px',
-              height: '60px',
+              height: `${cellSize}px`,
+              width: `${cellSize}px`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: '52px',
+              fontSize: `${Math.floor(cellSize * 0.85)}px`,
               lineHeight: 1,
               color: '#fff',
               textShadow: isSelectedWhiteRook ? '0 0 4px red, 0 0 0.5px #000' : '0 0 0.5px #000',
@@ -253,6 +276,49 @@ function App() {
             }}
           >
             ♖
+          </div>
+        )
+      }
+
+      if (blackKnightIndex !== -1) {
+        stein = (
+          <div
+            style={{
+              height: `${cellSize}px`,
+              width: `${cellSize}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: `${Math.floor(cellSize * 0.85)}px`,
+              lineHeight: 1,
+              color: '#111',
+              textShadow: isSelectedBlackKnight ? '0 0 4px red' : 'none',
+              userSelect: 'none'
+            }}
+          >
+            ♞
+          </div>
+        )
+      }
+
+      if (whiteKnightIndex !== -1) {
+        stein = (
+          <div
+            style={{
+              height: `${cellSize}px`,
+              width: `${cellSize}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: `${Math.floor(cellSize * 0.85)}px`,
+              lineHeight: 1,
+              color: '#fff',
+              textShadow: isSelectedWhiteKnight ? '0 0 4px red, 0 0 0.5px #000' : '0 0 0.5px #000',
+              WebkitTextStroke: '0.35px #000',
+              userSelect: 'none'
+            }}
+          >
+            ♘
           </div>
         )
       }
@@ -292,7 +358,7 @@ function App() {
             if (blackPawnIndex !== -1) {
               // Wenn ein weißer Bauer bereits ausgewählt ist, soll der gegnerische
               // schwarze Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if ((auswahl === 'pawn_white' || auswahl === 'rook_white') && selectedFrom) {
+              if ((auswahl === 'pawn_white' || auswahl === 'rook_white' || auswahl === 'knight_white') && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'black') {
@@ -317,6 +383,8 @@ function App() {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'rook_white' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
+              } else if (auswahl === 'knight_white' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
               } else {
                 if (rolle !== 'black') {
                   setAuswahl('')
@@ -338,7 +406,7 @@ function App() {
             if (whitePawnIndex !== -1) {
               // Wenn ein schwarzer Bauer bereits ausgewählt ist, soll der gegnerische
               // weiße Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if ((auswahl === 'pawn_black' || auswahl === 'rook_black') && selectedFrom) {
+              if ((auswahl === 'pawn_black' || auswahl === 'rook_black' || auswahl === 'knight_black') && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'white') {
@@ -363,6 +431,8 @@ function App() {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'rook_black' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
+              } else if (auswahl === 'knight_black' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
               } else {
                 if (rolle !== 'white') {
                   setAuswahl('')
@@ -381,6 +451,56 @@ function App() {
               }
             }
 
+            if (blackKnightIndex !== -1) {
+              if (auswahl === 'pawn_white' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
+              } else if (auswahl === 'rook_white' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
+              } else if (auswahl === 'knight_white' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
+              } else {
+                if (rolle !== 'black') {
+                  setAuswahl('')
+                  setSelectedFrom(null)
+                  setMeldung('Nur Schwarz darf schwarze Pferde auswählen.')
+                  return
+                }
+                if (turn !== 'black') {
+                  setMeldung('Schwarz ist gerade nicht am Zug.')
+                  return
+                }
+                setAuswahl('knight_black')
+                setSelectedFrom({ x, y })
+                setMeldung('Schwarzes Pferd ausgewählt.')
+                return
+              }
+            }
+
+            if (whiteKnightIndex !== -1) {
+              if (auswahl === 'pawn_black' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
+              } else if (auswahl === 'rook_black' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
+              } else if (auswahl === 'knight_black' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
+              } else {
+                if (rolle !== 'white') {
+                  setAuswahl('')
+                  setSelectedFrom(null)
+                  setMeldung('Nur Weiß darf weiße Pferde auswählen.')
+                  return
+                }
+                if (turn !== 'white') {
+                  setMeldung('Weiß ist gerade nicht am Zug.')
+                  return
+                }
+                setAuswahl('knight_white')
+                setSelectedFrom({ x, y })
+                setMeldung('Weißes Pferd ausgewählt.')
+                return
+              }
+            }
+
             if (auswahl === '') return
 
             try {
@@ -393,7 +513,8 @@ function App() {
 
               if (
                 (auswahl === 'pawn_black' || auswahl === 'pawn_white' ||
-                  auswahl === 'rook_black' || auswahl === 'rook_white') &&
+                  auswahl === 'rook_black' || auswahl === 'rook_white' ||
+                  auswahl === 'knight_black' || auswahl === 'knight_white') &&
                 selectedFrom
               ) {
                 body.from_x = selectedFrom.x
@@ -416,8 +537,8 @@ function App() {
             }
           }}
           style={{
-            width: '60px',
-            height: '60px',
+            height: `${cellSize}px`,
+            width: `${cellSize}px`,
             backgroundColor: farbe,
             display: 'flex',
             alignItems: 'center',
@@ -606,12 +727,23 @@ function App() {
 
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(8, 60px)',
-          border: '4px solid #ff0000'
+          width: '100%',
+          display: 'flex',
+          justifyContent: 'center',
+          overflowX: 'auto',
+          padding: '0 6px',
+          boxSizing: 'border-box'
         }}
       >
-        {felder}
+        <div
+          style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(8, ${cellSize}px)`,
+          border: '4px solid #ff0000'
+        }}
+        >
+          {felder}
+        </div>
       </div>
     </div>
   )

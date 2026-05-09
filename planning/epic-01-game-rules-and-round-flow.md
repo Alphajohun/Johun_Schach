@@ -81,3 +81,25 @@ Turn-Validierung in [`move()`](backend/app.py:362).
 - Frontend zeigt Turn-Fehler priorisiert und ohne widersprüchliche Texte
 - API liefert maschinenlesbaren Fehlercode zusätzlich zur Message
 
+### Story 01.05 - Neue Figur "Pferd" mit L-Zug und Sprungregel
+
+**Beschreibung**  
+Als Spieler möchte ich eine neue Figur "Pferd" nutzen, die sich im L-Muster bewegt und über andere Figuren springen kann, damit das Spiel taktisch vielfältiger wird.
+
+**Aktueller Bezug**  
+Regel- und Zuglogik liegen zentral in [`move()`](backend/app.py:328) sowie in der Regelübersicht in [`documentation/spielstand-fuer-coding-agent.md`](documentation/spielstand-fuer-coding-agent.md:86).
+
+**Acceptance Criteria**
+
+- Pro Farbe gibt es zwei Pferde auf den Startfeldern wie im Schach:
+  - Weiß: `b1` und `g1` (Koordinaten `x=1,y=7` und `x=6,y=7`)
+  - Schwarz: `b8` und `g8` (Koordinaten `x=1,y=0` und `x=6,y=0`)
+- Ein Pferd darf genau im L-Muster ziehen:
+  - entweder `2` Felder horizontal + `1` Feld vertikal
+  - oder `2` Felder vertikal + `1` Feld horizontal
+- Das Pferd darf über andere Figuren springen; Zwischenfelder blockieren den Zug nicht.
+- Schlagen erfolgt ausschließlich auf dem Zielfeld (letztes Feld des L-Zugs).
+- Pferde dürfen gegnerische Bauern, Türme und Pferde schlagen.
+- Eigene Figuren auf dem Zielfeld blockieren den Zug; eigene Figuren sind nicht schlagbar.
+- Ungültige Pferd-Züge liefern konsistente Fehlermeldungen in API und UI.
+

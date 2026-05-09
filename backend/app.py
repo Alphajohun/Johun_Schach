@@ -26,6 +26,10 @@ white_pawns = [{"x": x, "y": 6} for x in range(8)]
 black_rooks = [{"x": 0, "y": 0}, {"x": 7, "y": 0}]
 white_rooks = [{"x": 0, "y": 7}, {"x": 7, "y": 7}]
 
+# Pferde wie im Schach auf b/g-Linien
+black_knights = [{"x": 1, "y": 0}, {"x": 6, "y": 0}]
+white_knights = [{"x": 1, "y": 7}, {"x": 6, "y": 7}]
+
 # Punkte-Stand
 white_score = 0
 black_score = 0
@@ -98,6 +102,8 @@ def current_state():
         "pawns_white": white_pawns,
         "rooks_black": black_rooks,
         "rooks_white": white_rooks,
+        "knights_black": black_knights,
+        "knights_white": white_knights,
         "score": {"white": white_score, "black": black_score},
         "turn": current_turn,
         "players": {
@@ -114,12 +120,16 @@ def reset_positions():
     global white_pawns
     global black_rooks
     global white_rooks
+    global black_knights
+    global white_knights
     global current_turn
 
     black_pawns = [{"x": x, "y": 1} for x in range(8)]
     white_pawns = [{"x": x, "y": 6} for x in range(8)]
     black_rooks = [{"x": 0, "y": 0}, {"x": 7, "y": 0}]
     white_rooks = [{"x": 0, "y": 7}, {"x": 7, "y": 7}]
+    black_knights = [{"x": 1, "y": 0}, {"x": 6, "y": 0}]
+    white_knights = [{"x": 1, "y": 7}, {"x": 6, "y": 7}]
     current_turn = "white"
 
 
@@ -132,6 +142,13 @@ def find_pawn_index(pawns: list, x: int, y: int):
 
 def find_rook_index(rooks: list, x: int, y: int):
     for idx, t in enumerate(rooks):
+        if t["x"] == x and t["y"] == y:
+            return idx
+    return -1
+
+
+def find_knight_index(knights: list, x: int, y: int):
+    for idx, t in enumerate(knights):
         if t["x"] == x and t["y"] == y:
             return idx
     return -1
@@ -162,6 +179,18 @@ def cell_occupied(x: int, y: int, ignore_kind: str = "", ignore_index: int = -1)
         if t["x"] == x and t["y"] == y:
             return True
 
+    for idx, t in enumerate(black_knights):
+        if ignore_kind == "knight_black" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
+    for idx, t in enumerate(white_knights):
+        if ignore_kind == "knight_white" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
     return False
 
 
@@ -181,6 +210,14 @@ def get_piece_at(x: int, y: int):
     for t in white_rooks:
         if t["x"] == x and t["y"] == y:
             return "rook_white"
+
+    for t in black_knights:
+        if t["x"] == x and t["y"] == y:
+            return "knight_black"
+
+    for t in white_knights:
+        if t["x"] == x and t["y"] == y:
+            return "knight_white"
 
     return ""
 
@@ -205,6 +242,16 @@ def remove_piece_at(x: int, y: int):
     if idx != -1:
         del white_rooks[idx]
         return "rook_white"
+
+    idx = find_knight_index(black_knights, x, y)
+    if idx != -1:
+        del black_knights[idx]
+        return "knight_black"
+
+    idx = find_knight_index(white_knights, x, y)
+    if idx != -1:
+        del white_knights[idx]
+        return "knight_white"
 
     return ""
 
@@ -360,9 +407,9 @@ def move(data: dict):
         }
 
     # Zugreihenfolge erzwingen
-    if current_turn == "white" and color not in ["pawn_white", "rook_white"]:
+    if current_turn == "white" and color not in ["pawn_white", "rook_white", "knight_white"]:
         message = "Weiß ist am Zug."
-    elif current_turn == "black" and color not in ["pawn_black", "rook_black"]:
+    elif current_turn == "black" and color not in ["pawn_black", "rook_black", "knight_black"]:
         message = "Schwarz ist am Zug."
 
     # Schwarzer Bauer: Richtung Gegner (nach unten, y+1)
@@ -402,7 +449,7 @@ def move(data: dict):
                         message = "Schwarzer Bauer wurde 2 Felder bewegt."
                 elif is_capture:
                     target_piece = get_piece_at(x, y)
-                    if target_piece not in ["pawn_white", "rook_white"]:
+                    if target_piece not in ["pawn_white", "rook_white", "knight_white"]:
                         message = "Diagonal kann nur geschlagen werden, wenn dort eine weiße Figur steht."
                     else:
                         remove_piece_at(x, y)
@@ -450,7 +497,7 @@ def move(data: dict):
                         message = "Weißer Bauer wurde 2 Felder bewegt."
                 elif is_capture:
                     target_piece = get_piece_at(x, y)
-                    if target_piece not in ["pawn_black", "rook_black"]:
+                    if target_piece not in ["pawn_black", "rook_black", "knight_black"]:
                         message = "Diagonal kann nur geschlagen werden, wenn dort eine schwarze Figur steht."
                     else:
                         remove_piece_at(x, y)
@@ -550,6 +597,66 @@ def move(data: dict):
                         message = "Weißer Turm wurde bewegt."
                     else:
                         message = "Weißer Turm hat geschlagen."
+
+    # Schwarzes Pferd: L-Zug, darf springen.
+    elif color == "knight_black":
+        if client_id != black_player:
+            message = "Nur der schwarze Spieler darf schwarze Pferde bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für schwarzes Pferd."
+        else:
+            idx = find_knight_index(black_knights, from_x, from_y)
+            if idx == -1:
+                message = "Schwarzes Pferd auf Quellfeld nicht gefunden."
+            else:
+                dx = abs(x - from_x)
+                dy = abs(y - from_y)
+                is_l_move = (dx == 2 and dy == 1) or (dx == 1 and dy == 2)
+                if not is_l_move:
+                    message = "Pferd muss im L ziehen (2+1)."
+                else:
+                    target_piece = get_piece_at(x, y)
+                    if target_piece in ["pawn_black", "rook_black", "knight_black"]:
+                        message = "Eigene Figur blockiert das Zielfeld."
+                    else:
+                        if target_piece != "":
+                            remove_piece_at(x, y)
+                            message = "Schwarzes Pferd hat geschlagen."
+                        else:
+                            message = "Schwarzes Pferd wurde bewegt."
+                        black_knights[idx]["x"] = x
+                        black_knights[idx]["y"] = y
+                        accepted = True
+
+    # Weißes Pferd: L-Zug, darf springen.
+    elif color == "knight_white":
+        if client_id != white_player:
+            message = "Nur der weiße Spieler darf weiße Pferde bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für weißes Pferd."
+        else:
+            idx = find_knight_index(white_knights, from_x, from_y)
+            if idx == -1:
+                message = "Weißes Pferd auf Quellfeld nicht gefunden."
+            else:
+                dx = abs(x - from_x)
+                dy = abs(y - from_y)
+                is_l_move = (dx == 2 and dy == 1) or (dx == 1 and dy == 2)
+                if not is_l_move:
+                    message = "Pferd muss im L ziehen (2+1)."
+                else:
+                    target_piece = get_piece_at(x, y)
+                    if target_piece in ["pawn_white", "rook_white", "knight_white"]:
+                        message = "Eigene Figur blockiert das Zielfeld."
+                    else:
+                        if target_piece != "":
+                            remove_piece_at(x, y)
+                            message = "Weißes Pferd hat geschlagen."
+                        else:
+                            message = "Weißes Pferd wurde bewegt."
+                        white_knights[idx]["x"] = x
+                        white_knights[idx]["y"] = y
+                        accepted = True
 
     else:
         message = "Unbekannte Figur."

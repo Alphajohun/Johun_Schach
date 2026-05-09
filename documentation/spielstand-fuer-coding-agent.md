@@ -39,6 +39,7 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
 - Figuren:
   - `black_pawns`, `white_pawns`
   - `black_rooks`, `white_rooks`
+  - `black_knights`, `white_knights`
 - Score:
   - `white_score`, `black_score`
 - Turn:
@@ -58,6 +59,8 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
 - Weiße Bauern starten auf `y=6`
 - Schwarze Türme starten auf `0,0` und `7,0`
 - Weiße Türme starten auf `0,7` und `7,7`
+- Schwarze Pferde starten auf `1,0` und `6,0` (b8/g8)
+- Weiße Pferde starten auf `1,7` und `6,7` (b1/g1)
 
 Quelle: [`reset_positions()`](backend/app.py:112).
 
@@ -74,12 +77,12 @@ Quelle: Turn-Checks in [`move()`](backend/app.py:328) und Toggle in [`move()`](b
 Schwarzer Bauer in [`pawn_black`-Zweig](backend/app.py:369):
 - Vorwärts 1 Feld (`y+1`) wenn frei
 - Initial optional 2 Felder von Startreihe `y=1`, wenn Zwischenfeld und Ziel frei
-- Diagonal schlagen auf jede weiße Figur (`pawn_white` oder `rook_white`)
+- Diagonal schlagen auf jede weiße Figur (`pawn_white`, `rook_white`, `knight_white`)
 
 Weißer Bauer in [`pawn_white`-Zweig](backend/app.py:417):
 - Vorwärts 1 Feld (`y-1`) wenn frei
 - Initial optional 2 Felder von Startreihe `y=6`, wenn Zwischenfeld und Ziel frei
-- Diagonal schlagen auf jede schwarze Figur (`pawn_black` oder `rook_black`)
+- Diagonal schlagen auf jede schwarze Figur (`pawn_black`, `rook_black`, `knight_black`)
 
 Wichtig: Bauern schlagen weiterhin nur diagonal vorwärts um 1 Feld, aber auf alle gegnerischen Figurtypen am Zielfeld.
 
@@ -94,7 +97,17 @@ Turmregeln werden für Schwarz und Weiß separat verarbeitet in [`move()`](backe
 
 Pfadprüfung erfolgt in [`path_clear_straight()`](backend/app.py:212).
 
-## 3.5 Rundensystem und Score
+## 3.5 Zugregeln Pferde
+
+Pferdregeln werden für Schwarz und Weiß separat verarbeitet in [`move()`](backend/app.py:594) und [`move()`](backend/app.py:626):
+
+- L-Zug: genau `2+1` Felder (`(2,1)` oder `(1,2)`)
+- Zwischenfelder sind irrelevant: Pferde dürfen über Figuren springen
+- Schlagen nur auf dem Zielfeld (letztes Feld des L-Zugs)
+- Eigene Figur auf Zielfeld blockiert
+- Gegnerische Figur auf Zielfeld wird geschlagen
+
+## 3.6 Rundensystem und Score
 
 - Es gibt keinen automatischen Siegzustand.
 - Spieler können Runde aktiv aufgeben über `/reset_round`.
