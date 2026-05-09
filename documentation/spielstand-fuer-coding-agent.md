@@ -42,6 +42,7 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
   - `black_knights`, `white_knights`
   - `black_bishops`, `white_bishops`
   - `black_queens`, `white_queens`
+  - `black_kings`, `white_kings`
 - Score:
   - `white_score`, `black_score`
 - Turn:
@@ -67,6 +68,8 @@ Zentraler Zustand in globalen Variablen in [`backend/app.py`](backend/app.py:20)
 - Weiße Läufer starten auf `2,7` und `5,7` (c1/f1)
 - Schwarze Dame startet auf `3,0` (d8)
 - Weiße Dame startet auf `3,7` (d1)
+- Schwarzer König startet auf `4,0` (e8)
+- Weißer König startet auf `4,7` (e1)
 
 Quelle: [`reset_positions()`](backend/app.py:112).
 
@@ -137,6 +140,33 @@ Läuferregeln werden für Schwarz und Weiß separat verarbeitet in [`move()`](ba
 Pfadprüfung erfolgt über [`path_clear_diagonal()`](backend/app.py:333).
 
 ## 3.8 Rundensystem und Score
+
+## 3.9 König und Schach (ohne Rochade/En-passant/Schachmatt)
+
+- König zieht genau 1 Feld in jede Richtung.
+- König darf nicht auf Felder mit eigener Figur ziehen.
+- König darf nicht auf ein Feld ziehen, das von einer gegnerischen Figur angegriffen wird.
+- Ein Zug ist ungültig, wenn der eigene König danach im Schach steht.
+- Im Schach sind nur Züge erlaubt, die das Schach aufheben (Königszug, Blocken oder Schlagen der angreifenden Figur).
+- Es gibt aktuell keine Rochade, kein En-passant und keine Schachmatt-/Patt-Enderkennung.
+
+## 3.10 Endregeln: Schachmatt, Patt, Material-Remis
+
+- **Schachmatt**: Wenn der Spieler am Zug im Schach steht und keinen legalen Zug hat, erhält die Gegenseite 1 Punkt und die Runde wird zurückgesetzt.
+- **Patt**: Wenn der Spieler am Zug nicht im Schach steht und keinen legalen Zug hat, erhalten beide Seiten 0.5 Punkte und die Runde wird zurückgesetzt.
+- **Remis durch unzureichendes Material**: Wenn **beide** Seiten nur unzureichendes Material besitzen (nur König oder König + genau 1 Läufer oder König + genau 1 Springer), erhalten beide 0.5 Punkte und die Runde wird zurückgesetzt.
+
+Nicht enthalten:
+- Keine Rochade
+- En-passant ist enthalten (klassisch, nur im direkt folgenden Zug)
+- Keine weitere Sonderregel für andere Material-Kombinationen
+
+## 3.11 En Passant
+
+- Wenn ein Bauer einen Zwei-Felder-Zug macht, entsteht für den Gegner **nur im direkt folgenden Zug** eine En-Passant-Möglichkeit.
+- Klassische Ausführung: Der gegnerische Bauer zieht diagonal auf das Feld hinter den gerade gezogenen Bauern.
+- Der gerade zwei Felder gezogene Bauer wird dabei entfernt.
+- Wenn der direkte Folgezug nicht als En Passant genutzt wird, verfällt die Möglichkeit.
 
 - Es gibt keinen automatischen Siegzustand.
 - Spieler können Runde aktiv aufgeben über `/reset_round`.

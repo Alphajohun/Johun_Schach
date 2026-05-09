@@ -38,6 +38,10 @@ white_bishops = [{"x": 2, "y": 7}, {"x": 5, "y": 7}]
 black_queens = [{"x": 3, "y": 0}]
 white_queens = [{"x": 3, "y": 7}]
 
+# Könige auf e8 (schwarz) und e1 (weiß)
+black_kings = [{"x": 4, "y": 0}]
+white_kings = [{"x": 4, "y": 7}]
+
 # Punkte-Stand
 white_score = 0
 black_score = 0
@@ -54,6 +58,9 @@ white_last_seen = 0.0
 black_last_seen = 0.0
 
 PLAYER_TIMEOUT_SECONDS = 2.5
+round_event = ""
+round_event_until = 0.0
+en_passant = {"active": False, "by": "", "capture_x": -1, "capture_y": -1, "pawn_x": -1, "pawn_y": -1}
 
 
 def clear_all_players_and_reset():
@@ -105,6 +112,9 @@ def touch_player(client_id: str):
 
 def current_state():
     cleanup_disconnected_players()
+    event_text = ""
+    if round_event != "" and time.time() < round_event_until:
+        event_text = round_event
     return {
         "pawns_black": black_pawns,
         "pawns_white": white_pawns,
@@ -116,8 +126,11 @@ def current_state():
         "bishops_white": white_bishops,
         "queens_black": black_queens,
         "queens_white": white_queens,
+        "kings_black": black_kings,
+        "kings_white": white_kings,
         "score": {"white": white_score, "black": black_score},
         "turn": current_turn,
+        "round_event": event_text,
         "players": {
             "white_taken": white_player != "",
             "black_taken": black_player != "",
@@ -138,6 +151,9 @@ def reset_positions():
     global white_bishops
     global black_queens
     global white_queens
+    global black_kings
+    global white_kings
+    global en_passant
     global current_turn
 
     black_pawns = [{"x": x, "y": 1} for x in range(8)]
@@ -150,6 +166,9 @@ def reset_positions():
     white_bishops = [{"x": 2, "y": 7}, {"x": 5, "y": 7}]
     black_queens = [{"x": 3, "y": 0}]
     white_queens = [{"x": 3, "y": 7}]
+    black_kings = [{"x": 4, "y": 0}]
+    white_kings = [{"x": 4, "y": 7}]
+    en_passant = {"active": False, "by": "", "capture_x": -1, "capture_y": -1, "pawn_x": -1, "pawn_y": -1}
     current_turn = "white"
 
 
@@ -183,6 +202,13 @@ def find_queen_index(queens: list, x: int, y: int):
 
 def find_bishop_index(bishops: list, x: int, y: int):
     for idx, t in enumerate(bishops):
+        if t["x"] == x and t["y"] == y:
+            return idx
+    return -1
+
+
+def find_king_index(kings: list, x: int, y: int):
+    for idx, t in enumerate(kings):
         if t["x"] == x and t["y"] == y:
             return idx
     return -1
@@ -249,6 +275,18 @@ def cell_occupied(x: int, y: int, ignore_kind: str = "", ignore_index: int = -1)
         if t["x"] == x and t["y"] == y:
             return True
 
+    for idx, t in enumerate(black_kings):
+        if ignore_kind == "king_black" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
+    for idx, t in enumerate(white_kings):
+        if ignore_kind == "king_white" and idx == ignore_index:
+            continue
+        if t["x"] == x and t["y"] == y:
+            return True
+
     return False
 
 
@@ -292,6 +330,14 @@ def get_piece_at(x: int, y: int):
     for t in white_queens:
         if t["x"] == x and t["y"] == y:
             return "queen_white"
+
+    for t in black_kings:
+        if t["x"] == x and t["y"] == y:
+            return "king_black"
+
+    for t in white_kings:
+        if t["x"] == x and t["y"] == y:
+            return "king_white"
 
     return ""
 
@@ -346,6 +392,16 @@ def remove_piece_at(x: int, y: int):
     if idx != -1:
         del white_queens[idx]
         return "queen_white"
+
+    idx = find_king_index(black_kings, x, y)
+    if idx != -1:
+        del black_kings[idx]
+        return "king_black"
+
+    idx = find_king_index(white_kings, x, y)
+    if idx != -1:
+        del white_kings[idx]
+        return "king_white"
 
     return ""
 
@@ -404,6 +460,301 @@ def path_clear_diagonal(from_x: int, from_y: int, to_x: int, to_y: int):
         x += step_x
         y += step_y
     return True
+
+
+def get_king_position(side: str):
+    kings = white_kings if side == "white" else black_kings
+    if len(kings) == 0:
+        return None
+    return kings[0]["x"], kings[0]["y"]
+
+
+def is_square_attacked_by(attacker_side: str, x: int, y: int):
+    if attacker_side == "white":
+        for p in white_pawns:
+            if (p["x"] - 1 == x or p["x"] + 1 == x) and p["y"] - 1 == y:
+                return True
+        for r in white_rooks:
+            if path_clear_straight(r["x"], r["y"], x, y):
+                return True
+        for n in white_knights:
+            dx = abs(n["x"] - x)
+            dy = abs(n["y"] - y)
+            if (dx == 2 and dy == 1) or (dx == 1 and dy == 2):
+                return True
+        for b in white_bishops:
+            if path_clear_diagonal(b["x"], b["y"], x, y):
+                return True
+        for q in white_queens:
+            if path_clear_straight(q["x"], q["y"], x, y) or path_clear_diagonal(q["x"], q["y"], x, y):
+                return True
+        for k in white_kings:
+            if max(abs(k["x"] - x), abs(k["y"] - y)) == 1:
+                return True
+    else:
+        for p in black_pawns:
+            if (p["x"] - 1 == x or p["x"] + 1 == x) and p["y"] + 1 == y:
+                return True
+        for r in black_rooks:
+            if path_clear_straight(r["x"], r["y"], x, y):
+                return True
+        for n in black_knights:
+            dx = abs(n["x"] - x)
+            dy = abs(n["y"] - y)
+            if (dx == 2 and dy == 1) or (dx == 1 and dy == 2):
+                return True
+        for b in black_bishops:
+            if path_clear_diagonal(b["x"], b["y"], x, y):
+                return True
+        for q in black_queens:
+            if path_clear_straight(q["x"], q["y"], x, y) or path_clear_diagonal(q["x"], q["y"], x, y):
+                return True
+        for k in black_kings:
+            if max(abs(k["x"] - x), abs(k["y"] - y)) == 1:
+                return True
+    return False
+
+
+def is_in_check(side: str):
+    king_pos = get_king_position(side)
+    if king_pos is None:
+        return False
+    enemy_side = "black" if side == "white" else "white"
+    return is_square_attacked_by(enemy_side, king_pos[0], king_pos[1])
+
+
+def piece_entries_for_side(side: str):
+    if side == "white":
+        return [
+            ("pawn_white", white_pawns),
+            ("rook_white", white_rooks),
+            ("knight_white", white_knights),
+            ("bishop_white", white_bishops),
+            ("queen_white", white_queens),
+            ("king_white", white_kings),
+        ]
+    return [
+        ("pawn_black", black_pawns),
+        ("rook_black", black_rooks),
+        ("knight_black", black_knights),
+        ("bishop_black", black_bishops),
+        ("queen_black", black_queens),
+        ("king_black", black_kings),
+    ]
+
+
+def pseudo_legal_move(color: str, from_x: int, from_y: int, to_x: int, to_y: int):
+    if to_x < 0 or to_x > 7 or to_y < 0 or to_y > 7:
+        return False
+    if from_x == to_x and from_y == to_y:
+        return False
+
+    target_piece = get_piece_at(to_x, to_y)
+
+    if color.endswith("_white") and target_piece.endswith("_white"):
+        return False
+    if color.endswith("_black") and target_piece.endswith("_black"):
+        return False
+    if target_piece in ["king_white", "king_black"]:
+        return False
+
+    if color == "pawn_white":
+        one = from_y - 1
+        two = from_y - 2
+        if to_x == from_x and to_y == one and target_piece == "":
+            return True
+        if to_x == from_x and from_y == 6 and to_y == two and target_piece == "" and not cell_occupied(from_x, one):
+            return True
+        if to_y == one and (to_x == from_x - 1 or to_x == from_x + 1) and target_piece != "" and target_piece.endswith("_black"):
+            return True
+        if (
+            to_y == one
+            and (to_x == from_x - 1 or to_x == from_x + 1)
+            and target_piece == ""
+            and en_passant["active"]
+            and en_passant["by"] == "white"
+            and en_passant["capture_x"] == to_x
+            and en_passant["capture_y"] == to_y
+        ):
+            return True
+        return False
+
+    if color == "pawn_black":
+        one = from_y + 1
+        two = from_y + 2
+        if to_x == from_x and to_y == one and target_piece == "":
+            return True
+        if to_x == from_x and from_y == 1 and to_y == two and target_piece == "" and not cell_occupied(from_x, one):
+            return True
+        if to_y == one and (to_x == from_x - 1 or to_x == from_x + 1) and target_piece != "" and target_piece.endswith("_white"):
+            return True
+        if (
+            to_y == one
+            and (to_x == from_x - 1 or to_x == from_x + 1)
+            and target_piece == ""
+            and en_passant["active"]
+            and en_passant["by"] == "black"
+            and en_passant["capture_x"] == to_x
+            and en_passant["capture_y"] == to_y
+        ):
+            return True
+        return False
+
+    if color in ["rook_white", "rook_black"]:
+        return path_clear_straight(from_x, from_y, to_x, to_y)
+
+    if color in ["bishop_white", "bishop_black"]:
+        return path_clear_diagonal(from_x, from_y, to_x, to_y)
+
+    if color in ["queen_white", "queen_black"]:
+        return path_clear_straight(from_x, from_y, to_x, to_y) or path_clear_diagonal(from_x, from_y, to_x, to_y)
+
+    if color in ["knight_white", "knight_black"]:
+        dx = abs(to_x - from_x)
+        dy = abs(to_y - from_y)
+        return (dx == 2 and dy == 1) or (dx == 1 and dy == 2)
+
+    if color in ["king_white", "king_black"]:
+        return max(abs(to_x - from_x), abs(to_y - from_y)) == 1
+
+    return False
+
+
+def move_piece_no_validation(color: str, from_x: int, from_y: int, to_x: int, to_y: int):
+    target_piece = get_piece_at(to_x, to_y)
+    if target_piece != "":
+        remove_piece_at(to_x, to_y)
+
+    if color == "pawn_white" and target_piece == "" and en_passant["active"] and en_passant["by"] == "white":
+        if en_passant["capture_x"] == to_x and en_passant["capture_y"] == to_y:
+            remove_piece_at(en_passant["pawn_x"], en_passant["pawn_y"])
+    if color == "pawn_black" and target_piece == "" and en_passant["active"] and en_passant["by"] == "black":
+        if en_passant["capture_x"] == to_x and en_passant["capture_y"] == to_y:
+            remove_piece_at(en_passant["pawn_x"], en_passant["pawn_y"])
+
+    if color == "pawn_white":
+        idx = find_pawn_index(white_pawns, from_x, from_y)
+        if idx != -1:
+            white_pawns[idx]["x"] = to_x
+            white_pawns[idx]["y"] = to_y
+    elif color == "pawn_black":
+        idx = find_pawn_index(black_pawns, from_x, from_y)
+        if idx != -1:
+            black_pawns[idx]["x"] = to_x
+            black_pawns[idx]["y"] = to_y
+    elif color == "rook_white":
+        idx = find_rook_index(white_rooks, from_x, from_y)
+        if idx != -1:
+            white_rooks[idx]["x"] = to_x
+            white_rooks[idx]["y"] = to_y
+    elif color == "rook_black":
+        idx = find_rook_index(black_rooks, from_x, from_y)
+        if idx != -1:
+            black_rooks[idx]["x"] = to_x
+            black_rooks[idx]["y"] = to_y
+    elif color == "knight_white":
+        idx = find_knight_index(white_knights, from_x, from_y)
+        if idx != -1:
+            white_knights[idx]["x"] = to_x
+            white_knights[idx]["y"] = to_y
+    elif color == "knight_black":
+        idx = find_knight_index(black_knights, from_x, from_y)
+        if idx != -1:
+            black_knights[idx]["x"] = to_x
+            black_knights[idx]["y"] = to_y
+    elif color == "bishop_white":
+        idx = find_bishop_index(white_bishops, from_x, from_y)
+        if idx != -1:
+            white_bishops[idx]["x"] = to_x
+            white_bishops[idx]["y"] = to_y
+    elif color == "bishop_black":
+        idx = find_bishop_index(black_bishops, from_x, from_y)
+        if idx != -1:
+            black_bishops[idx]["x"] = to_x
+            black_bishops[idx]["y"] = to_y
+    elif color == "queen_white":
+        idx = find_queen_index(white_queens, from_x, from_y)
+        if idx != -1:
+            white_queens[idx]["x"] = to_x
+            white_queens[idx]["y"] = to_y
+    elif color == "queen_black":
+        idx = find_queen_index(black_queens, from_x, from_y)
+        if idx != -1:
+            black_queens[idx]["x"] = to_x
+            black_queens[idx]["y"] = to_y
+    elif color == "king_white":
+        idx = find_king_index(white_kings, from_x, from_y)
+        if idx != -1:
+            white_kings[idx]["x"] = to_x
+            white_kings[idx]["y"] = to_y
+    elif color == "king_black":
+        idx = find_king_index(black_kings, from_x, from_y)
+        if idx != -1:
+            black_kings[idx]["x"] = to_x
+            black_kings[idx]["y"] = to_y
+
+
+def restore_snapshot(snapshot: dict):
+    global black_pawns, white_pawns, black_rooks, white_rooks
+    global black_knights, white_knights, black_bishops, white_bishops
+    global black_queens, white_queens, black_kings, white_kings
+    global en_passant
+
+    black_pawns = [p.copy() for p in snapshot["black_pawns"]]
+    white_pawns = [p.copy() for p in snapshot["white_pawns"]]
+    black_rooks = [p.copy() for p in snapshot["black_rooks"]]
+    white_rooks = [p.copy() for p in snapshot["white_rooks"]]
+    black_knights = [p.copy() for p in snapshot["black_knights"]]
+    white_knights = [p.copy() for p in snapshot["white_knights"]]
+    black_bishops = [p.copy() for p in snapshot["black_bishops"]]
+    white_bishops = [p.copy() for p in snapshot["white_bishops"]]
+    black_queens = [p.copy() for p in snapshot["black_queens"]]
+    white_queens = [p.copy() for p in snapshot["white_queens"]]
+    black_kings = [p.copy() for p in snapshot["black_kings"]]
+    white_kings = [p.copy() for p in snapshot["white_kings"]]
+    en_passant = snapshot["en_passant"].copy()
+
+
+def has_any_legal_move(side: str):
+    for color, pieces in piece_entries_for_side(side):
+        for p in pieces:
+            from_x = p["x"]
+            from_y = p["y"]
+            for to_y in range(8):
+                for to_x in range(8):
+                    if not pseudo_legal_move(color, from_x, from_y, to_x, to_y):
+                        continue
+                    snapshot = {
+                        "black_pawns": [q.copy() for q in black_pawns],
+                        "white_pawns": [q.copy() for q in white_pawns],
+                        "black_rooks": [q.copy() for q in black_rooks],
+                        "white_rooks": [q.copy() for q in white_rooks],
+                        "black_knights": [q.copy() for q in black_knights],
+                        "white_knights": [q.copy() for q in white_knights],
+                        "black_bishops": [q.copy() for q in black_bishops],
+                        "white_bishops": [q.copy() for q in white_bishops],
+                        "black_queens": [q.copy() for q in black_queens],
+                        "white_queens": [q.copy() for q in white_queens],
+                        "black_kings": [q.copy() for q in black_kings],
+                        "white_kings": [q.copy() for q in white_kings],
+                        "en_passant": en_passant.copy(),
+                    }
+                    move_piece_no_validation(color, from_x, from_y, to_x, to_y)
+                    still_in_check = is_in_check(side)
+                    restore_snapshot(snapshot)
+                    if not still_in_check:
+                        return True
+    return False
+
+
+def insufficient_material(side: str):
+    if side == "white":
+        if len(white_pawns) > 0 or len(white_rooks) > 0 or len(white_queens) > 0:
+            return False
+        return (len(white_bishops) + len(white_knights)) <= 1
+    if len(black_pawns) > 0 or len(black_rooks) > 0 or len(black_queens) > 0:
+        return False
+    return (len(black_bishops) + len(black_knights)) <= 1
 
 
 @app.get("/join")
@@ -493,6 +844,23 @@ def move(data: dict):
     global current_turn
     global white_player
     global black_player
+    global white_score
+    global black_score
+    global round_event
+    global round_event_until
+    global black_pawns
+    global white_pawns
+    global black_rooks
+    global white_rooks
+    global black_knights
+    global white_knights
+    global black_bishops
+    global white_bishops
+    global black_queens
+    global white_queens
+    global black_kings
+    global white_kings
+    global en_passant
 
     client_id = data["client_id"]
     color = data["color"]
@@ -500,6 +868,22 @@ def move(data: dict):
     y = data["y"]
     from_x = data.get("from_x")
     from_y = data.get("from_y")
+    promotion = data.get("promotion", "")
+    snapshot = {
+        "black_pawns": [p.copy() for p in black_pawns],
+        "white_pawns": [p.copy() for p in white_pawns],
+        "black_rooks": [p.copy() for p in black_rooks],
+        "white_rooks": [p.copy() for p in white_rooks],
+        "black_knights": [p.copy() for p in black_knights],
+        "white_knights": [p.copy() for p in white_knights],
+        "black_bishops": [p.copy() for p in black_bishops],
+        "white_bishops": [p.copy() for p in white_bishops],
+        "black_queens": [p.copy() for p in black_queens],
+        "white_queens": [p.copy() for p in white_queens],
+        "black_kings": [p.copy() for p in black_kings],
+        "white_kings": [p.copy() for p in white_kings],
+        "en_passant": en_passant.copy(),
+    }
 
     accepted = False
     message = "Ungültiger Zug."
@@ -523,10 +907,12 @@ def move(data: dict):
         }
 
     # Zugreihenfolge erzwingen
-    if current_turn == "white" and color not in ["pawn_white", "rook_white", "knight_white", "bishop_white", "queen_white"]:
+    if current_turn == "white" and color not in ["pawn_white", "rook_white", "knight_white", "bishop_white", "queen_white", "king_white"]:
         message = "Weiß ist am Zug."
-    elif current_turn == "black" and color not in ["pawn_black", "rook_black", "knight_black", "bishop_black", "queen_black"]:
+    elif current_turn == "black" and color not in ["pawn_black", "rook_black", "knight_black", "bishop_black", "queen_black", "king_black"]:
         message = "Schwarz ist am Zug."
+    elif (color.endswith("_white") and get_piece_at(x, y) == "king_black") or (color.endswith("_black") and get_piece_at(x, y) == "king_white"):
+        message = "Der König kann nicht geschlagen werden."
 
     # Schwarzer Bauer: Richtung Gegner (nach unten, y+1)
     elif color == "pawn_black":
@@ -565,16 +951,48 @@ def move(data: dict):
                         message = "Schwarzer Bauer wurde 2 Felder bewegt."
                 elif is_capture:
                     target_piece = get_piece_at(x, y)
-                    if target_piece not in ["pawn_white", "rook_white", "knight_white", "bishop_white", "queen_white"]:
+                    is_en_passant = (
+                        target_piece == ""
+                        and en_passant["active"]
+                        and en_passant["by"] == "black"
+                        and en_passant["capture_x"] == x
+                        and en_passant["capture_y"] == y
+                    )
+                    if target_piece not in ["pawn_white", "rook_white", "knight_white", "bishop_white", "queen_white"] and not is_en_passant:
                         message = "Diagonal kann nur geschlagen werden, wenn dort eine weiße Figur steht."
                     else:
-                        remove_piece_at(x, y)
+                        if is_en_passant:
+                            remove_piece_at(en_passant["pawn_x"], en_passant["pawn_y"])
+                        else:
+                            remove_piece_at(x, y)
                         black_pawns[idx]["x"] = x
                         black_pawns[idx]["y"] = y
                         accepted = True
                         message = "Schwarzer Bauer hat geschlagen."
                 else:
                     message = "Ungültiger Zug für schwarzen Bauern."
+
+                if accepted and black_pawns[idx]["y"] == 7:
+                    if promotion not in ["queen", "rook", "bishop", "knight"]:
+                        accepted = False
+                        message = "Bauernumwandlung benötigt: queen, rook, bishop oder knight."
+                        restore_snapshot(snapshot)
+                    else:
+                        px = black_pawns[idx]["x"]
+                        py = black_pawns[idx]["y"]
+                        del black_pawns[idx]
+                        if promotion == "queen":
+                            black_queens.append({"x": px, "y": py})
+                            message = "Schwarzer Bauer wurde in eine Dame umgewandelt."
+                        elif promotion == "rook":
+                            black_rooks.append({"x": px, "y": py})
+                            message = "Schwarzer Bauer wurde in einen Turm umgewandelt."
+                        elif promotion == "bishop":
+                            black_bishops.append({"x": px, "y": py})
+                            message = "Schwarzer Bauer wurde in einen Läufer umgewandelt."
+                        elif promotion == "knight":
+                            black_knights.append({"x": px, "y": py})
+                            message = "Schwarzer Bauer wurde in ein Pferd umgewandelt."
 
     # Weißer Bauer: Richtung Gegner (nach oben, y-1)
     elif color == "pawn_white":
@@ -613,16 +1031,48 @@ def move(data: dict):
                         message = "Weißer Bauer wurde 2 Felder bewegt."
                 elif is_capture:
                     target_piece = get_piece_at(x, y)
-                    if target_piece not in ["pawn_black", "rook_black", "knight_black", "bishop_black", "queen_black"]:
+                    is_en_passant = (
+                        target_piece == ""
+                        and en_passant["active"]
+                        and en_passant["by"] == "white"
+                        and en_passant["capture_x"] == x
+                        and en_passant["capture_y"] == y
+                    )
+                    if target_piece not in ["pawn_black", "rook_black", "knight_black", "bishop_black", "queen_black"] and not is_en_passant:
                         message = "Diagonal kann nur geschlagen werden, wenn dort eine schwarze Figur steht."
                     else:
-                        remove_piece_at(x, y)
+                        if is_en_passant:
+                            remove_piece_at(en_passant["pawn_x"], en_passant["pawn_y"])
+                        else:
+                            remove_piece_at(x, y)
                         white_pawns[idx]["x"] = x
                         white_pawns[idx]["y"] = y
                         accepted = True
                         message = "Weißer Bauer hat geschlagen."
                 else:
                     message = "Ungültiger Zug für weißen Bauern."
+
+                if accepted and white_pawns[idx]["y"] == 0:
+                    if promotion not in ["queen", "rook", "bishop", "knight"]:
+                        accepted = False
+                        message = "Bauernumwandlung benötigt: queen, rook, bishop oder knight."
+                        restore_snapshot(snapshot)
+                    else:
+                        px = white_pawns[idx]["x"]
+                        py = white_pawns[idx]["y"]
+                        del white_pawns[idx]
+                        if promotion == "queen":
+                            white_queens.append({"x": px, "y": py})
+                            message = "Weißer Bauer wurde in eine Dame umgewandelt."
+                        elif promotion == "rook":
+                            white_rooks.append({"x": px, "y": py})
+                            message = "Weißer Bauer wurde in einen Turm umgewandelt."
+                        elif promotion == "bishop":
+                            white_bishops.append({"x": px, "y": py})
+                            message = "Weißer Bauer wurde in einen Läufer umgewandelt."
+                        elif promotion == "knight":
+                            white_knights.append({"x": px, "y": py})
+                            message = "Weißer Bauer wurde in ein Pferd umgewandelt."
 
     # Schwarzer Turm: horizontal/vertikal, bis vor Hindernis.
     elif color == "rook_black":
@@ -884,8 +1334,116 @@ def move(data: dict):
                         white_queens[idx]["y"] = y
                         accepted = True
 
+    elif color == "king_black":
+        if client_id != black_player:
+            message = "Nur der schwarze Spieler darf den schwarzen König bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für schwarzen König."
+        else:
+            idx = find_king_index(black_kings, from_x, from_y)
+            if idx == -1:
+                message = "Schwarzer König auf Quellfeld nicht gefunden."
+            elif max(abs(x - from_x), abs(y - from_y)) != 1:
+                message = "König darf nur 1 Feld in jede Richtung ziehen."
+            else:
+                target_piece = get_piece_at(x, y)
+                if target_piece in ["pawn_black", "rook_black", "knight_black", "bishop_black", "queen_black", "king_black"]:
+                    message = "Eigene Figur blockiert das Zielfeld."
+                else:
+                    if target_piece != "":
+                        remove_piece_at(x, y)
+                        message = "Schwarzer König hat geschlagen."
+                    else:
+                        message = "Schwarzer König wurde bewegt."
+                    black_kings[idx]["x"] = x
+                    black_kings[idx]["y"] = y
+                    accepted = True
+
+    elif color == "king_white":
+        if client_id != white_player:
+            message = "Nur der weiße Spieler darf den weißen König bewegen."
+        elif from_x is None or from_y is None:
+            message = "Quellfeld fehlt für weißen König."
+        else:
+            idx = find_king_index(white_kings, from_x, from_y)
+            if idx == -1:
+                message = "Weißer König auf Quellfeld nicht gefunden."
+            elif max(abs(x - from_x), abs(y - from_y)) != 1:
+                message = "König darf nur 1 Feld in jede Richtung ziehen."
+            else:
+                target_piece = get_piece_at(x, y)
+                if target_piece in ["pawn_white", "rook_white", "knight_white", "bishop_white", "queen_white", "king_white"]:
+                    message = "Eigene Figur blockiert das Zielfeld."
+                else:
+                    if target_piece != "":
+                        remove_piece_at(x, y)
+                        message = "Weißer König hat geschlagen."
+                    else:
+                        message = "Weißer König wurde bewegt."
+                    white_kings[idx]["x"] = x
+                    white_kings[idx]["y"] = y
+                    accepted = True
+
     else:
         message = "Unbekannte Figur."
+
+    if accepted:
+        mover_side = "white" if color.endswith("_white") else "black"
+        enemy_side = "black" if mover_side == "white" else "white"
+        if is_in_check(mover_side):
+            restore_snapshot(snapshot)
+            accepted = False
+            message = "Ungültiger Zug: König würde im Schach stehen."
+        else:
+            # En-Passant-Fenster verwalten: nur direkt folgender Zug.
+            if color == "pawn_black" and from_y is not None and y == from_y + 2:
+                en_passant = {
+                    "active": True,
+                    "by": "white",
+                    "capture_x": x,
+                    "capture_y": from_y + 1,
+                    "pawn_x": x,
+                    "pawn_y": y,
+                }
+            elif color == "pawn_white" and from_y is not None and y == from_y - 2:
+                en_passant = {
+                    "active": True,
+                    "by": "black",
+                    "capture_x": x,
+                    "capture_y": from_y - 1,
+                    "pawn_x": x,
+                    "pawn_y": y,
+                }
+            else:
+                en_passant = {"active": False, "by": "", "capture_x": -1, "capture_y": -1, "pawn_x": -1, "pawn_y": -1}
+
+            # Nach erfolgreichem legalen Zug Endbedingungen für Gegenseite prüfen.
+            side_to_move = enemy_side
+            if insufficient_material("white") and insufficient_material("black"):
+                white_score += 0.5
+                black_score += 0.5
+                reset_positions()
+                message = "Remis durch unzureichendes Material. Beide erhalten 0.5 Punkte."
+            else:
+                in_check = is_in_check(side_to_move)
+                has_move = has_any_legal_move(side_to_move)
+                if not has_move and in_check:
+                    if side_to_move == "white":
+                        black_score += 1
+                    else:
+                        white_score += 1
+                    clear_all_players_and_reset()
+                    winner = "Schwarz" if side_to_move == "white" else "Weiß"
+                    message = f"Schachmatt. Punkt für {winner}."
+                    round_event = "SCHACHMATT"
+                    round_event_until = time.time() + 5.0
+                elif not has_move and not in_check:
+                    white_score += 0.5
+                    black_score += 0.5
+                    clear_all_players_and_reset()
+                    message = "Patt. Beide erhalten 0.5 Punkte."
+                    round_event = "PATT"
+                    round_event_until = time.time() + 5.0
 
     if accepted:
         current_turn = "black" if current_turn == "white" else "white"

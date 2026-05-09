@@ -34,6 +34,8 @@ function App() {
   const [bishopsWhite, setBishopsWhite] = useState([])
   const [queensBlack, setQueensBlack] = useState([])
   const [queensWhite, setQueensWhite] = useState([])
+  const [kingsBlack, setKingsBlack] = useState([])
+  const [kingsWhite, setKingsWhite] = useState([])
   const [score, setScore] = useState({ white: 0, black: 0 })
   const [turn, setTurn] = useState('white')
 
@@ -46,8 +48,124 @@ function App() {
   const [wunschfarbe, setWunschfarbe] = useState('spectator')
   const [clientId, setClientId] = useState('')
   const [meldung, setMeldung] = useState('Verbinde mit Server...')
+  const [endOverlay, setEndOverlay] = useState('')
+  const [lastRoundEvent, setLastRoundEvent] = useState('')
+  const [pendingPromotion, setPendingPromotion] = useState(null)
   const [players, setPlayers] = useState({ white_taken: false, black_taken: false })
   const gameReady = players.white_taken && players.black_taken
+
+  const showEndOverlayAndBackToMenu = (text) => {
+    setEndOverlay(text)
+    setAuswahl('')
+    setSelectedFrom(null)
+
+    window.setTimeout(() => {
+      setEndOverlay('')
+      setHasJoined(false)
+      setRolle('loading')
+      setWasGameReady(false)
+      setMeldung(text)
+    }, 5000)
+  }
+
+  const renderEndOverlay = () => {
+    if (endOverlay === '') return null
+    return (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(0,0,0,0.75)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}
+      >
+        <div style={{ fontSize: '56px', fontWeight: 900, color: 'white', letterSpacing: '2px' }}>
+          {endOverlay}
+        </div>
+      </div>
+    )
+  }
+
+  const submitMove = async (body) => {
+    try {
+      const res = await fetch(`${API_BASE}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+
+      const data = await res.json()
+      applyStateFromServer(data)
+      setAuswahl('')
+      setSelectedFrom(null)
+      setPendingPromotion(null)
+      setMeldung(data.message || (data.accepted ? 'Zug gesendet.' : 'Ungültiger Zug.'))
+
+      const msg = (data.message || '').toLowerCase()
+      if (msg.includes('schachmatt')) {
+        showEndOverlayAndBackToMenu('SCHACHMATT')
+      } else if (msg.includes('patt')) {
+        showEndOverlayAndBackToMenu('PATT')
+      }
+    } catch {
+      setMeldung('Zug konnte nicht gesendet werden. Prüfe Backend-Verbindung.')
+    }
+  }
+
+  const renderPromotionMenu = () => {
+    if (!pendingPromotion) return null
+
+    const iconColor = pendingPromotion.color.endsWith('_white') ? '#fff' : '#111'
+    const textShadow = pendingPromotion.color.endsWith('_white') ? '0 0 0.5px #000' : 'none'
+
+    const options = [
+      { key: 'queen', icon: '♛' },
+      { key: 'knight', icon: '♞' },
+      { key: 'rook', icon: '♜' },
+      { key: 'bishop', icon: '♝' }
+    ]
+
+    return (
+      <div style={{ position: 'fixed', left: 12, top: 12, zIndex: 9998 }}>
+        <div style={{ backgroundColor: '#f0ede6', border: '2px solid #8a6a44', borderRadius: '10px', padding: '8px 6px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {options.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => submitMove({ ...pendingPromotion, promotion: opt.key })}
+              style={{
+                width: '58px',
+                height: '58px',
+                border: '1px solid #8a6a44',
+                borderRadius: '8px',
+                backgroundColor: '#f7f3ea',
+                cursor: 'pointer',
+                fontSize: '44px',
+                lineHeight: 1,
+                color: iconColor,
+                textShadow
+              }}
+            >
+              {opt.icon}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => {
+              setPendingPromotion(null)
+              setMeldung('Bauernumwandlung abgebrochen.')
+            }}
+            style={{ width: '58px', height: '40px', border: '1px solid #8a6a44', borderRadius: '8px', backgroundColor: '#eee', cursor: 'pointer', fontSize: '30px', color: '#666' }}
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const applyStateFromServer = (data) => {
     if (Array.isArray(data.pawns_black)) setPawnsBlack(data.pawns_black)
@@ -60,6 +178,14 @@ function App() {
     if (Array.isArray(data.bishops_white)) setBishopsWhite(data.bishops_white)
     if (Array.isArray(data.queens_black)) setQueensBlack(data.queens_black)
     if (Array.isArray(data.queens_white)) setQueensWhite(data.queens_white)
+    if (Array.isArray(data.kings_black)) setKingsBlack(data.kings_black)
+    if (Array.isArray(data.kings_white)) setKingsWhite(data.kings_white)
+    if (typeof data.round_event === 'string' && data.round_event !== '') {
+      if (data.round_event !== lastRoundEvent) {
+        setLastRoundEvent(data.round_event)
+        showEndOverlayAndBackToMenu(data.round_event)
+      }
+    }
     if (data.score) setScore(data.score)
     if (data.turn) setTurn(data.turn)
     if (data.players) {
@@ -197,12 +323,130 @@ function App() {
   const hasWhiteBishopAt = (x, y) => bishopsWhite.findIndex((t) => t.x === x && t.y === y)
   const hasBlackQueenAt = (x, y) => queensBlack.findIndex((t) => t.x === x && t.y === y)
   const hasWhiteQueenAt = (x, y) => queensWhite.findIndex((t) => t.x === x && t.y === y)
+  const hasBlackKingAt = (x, y) => kingsBlack.findIndex((t) => t.x === x && t.y === y)
+  const hasWhiteKingAt = (x, y) => kingsWhite.findIndex((t) => t.x === x && t.y === y)
+
+  const occupiedAt = (x, y) => {
+    return (
+      hasBlackPawnAt(x, y) !== -1 ||
+      hasWhitePawnAt(x, y) !== -1 ||
+      hasBlackRookAt(x, y) !== -1 ||
+      hasWhiteRookAt(x, y) !== -1 ||
+      hasBlackKnightAt(x, y) !== -1 ||
+      hasWhiteKnightAt(x, y) !== -1 ||
+      hasBlackBishopAt(x, y) !== -1 ||
+      hasWhiteBishopAt(x, y) !== -1 ||
+      hasBlackQueenAt(x, y) !== -1 ||
+      hasWhiteQueenAt(x, y) !== -1 ||
+      hasBlackKingAt(x, y) !== -1 ||
+      hasWhiteKingAt(x, y) !== -1
+    )
+  }
+
+  const pathClearStraight = (fromX, fromY, toX, toY) => {
+    if (fromX !== toX && fromY !== toY) return false
+    if (fromX === toX && fromY === toY) return false
+
+    if (fromX === toX) {
+      const step = toY > fromY ? 1 : -1
+      let yy = fromY + step
+      while (yy !== toY) {
+        if (occupiedAt(fromX, yy)) return false
+        yy += step
+      }
+      return true
+    }
+
+    const step = toX > fromX ? 1 : -1
+    let xx = fromX + step
+    while (xx !== toX) {
+      if (occupiedAt(xx, fromY)) return false
+      xx += step
+    }
+    return true
+  }
+
+  const pathClearDiagonal = (fromX, fromY, toX, toY) => {
+    const dx = toX - fromX
+    const dy = toY - fromY
+    if (dx === 0 && dy === 0) return false
+    if (Math.abs(dx) !== Math.abs(dy)) return false
+
+    const stepX = dx > 0 ? 1 : -1
+    const stepY = dy > 0 ? 1 : -1
+    let xx = fromX + stepX
+    let yy = fromY + stepY
+    while (xx !== toX && yy !== toY) {
+      if (occupiedAt(xx, yy)) return false
+      xx += stepX
+      yy += stepY
+    }
+    return true
+  }
+
+  const isSquareAttackedBy = (side, x, y) => {
+    if (side === 'white') {
+      for (const p of pawnsWhite) {
+        if ((p.x - 1 === x || p.x + 1 === x) && p.y - 1 === y) return true
+      }
+      for (const r of rooksWhite) {
+        if (pathClearStraight(r.x, r.y, x, y)) return true
+      }
+      for (const n of knightsWhite) {
+        const dx = Math.abs(n.x - x)
+        const dy = Math.abs(n.y - y)
+        if ((dx === 2 && dy === 1) || (dx === 1 && dy === 2)) return true
+      }
+      for (const b of bishopsWhite) {
+        if (pathClearDiagonal(b.x, b.y, x, y)) return true
+      }
+      for (const q of queensWhite) {
+        if (pathClearStraight(q.x, q.y, x, y) || pathClearDiagonal(q.x, q.y, x, y)) return true
+      }
+      for (const k of kingsWhite) {
+        if (Math.max(Math.abs(k.x - x), Math.abs(k.y - y)) === 1) return true
+      }
+    } else {
+      for (const p of pawnsBlack) {
+        if ((p.x - 1 === x || p.x + 1 === x) && p.y + 1 === y) return true
+      }
+      for (const r of rooksBlack) {
+        if (pathClearStraight(r.x, r.y, x, y)) return true
+      }
+      for (const n of knightsBlack) {
+        const dx = Math.abs(n.x - x)
+        const dy = Math.abs(n.y - y)
+        if ((dx === 2 && dy === 1) || (dx === 1 && dy === 2)) return true
+      }
+      for (const b of bishopsBlack) {
+        if (pathClearDiagonal(b.x, b.y, x, y)) return true
+      }
+      for (const q of queensBlack) {
+        if (pathClearStraight(q.x, q.y, x, y) || pathClearDiagonal(q.x, q.y, x, y)) return true
+      }
+      for (const k of kingsBlack) {
+        if (Math.max(Math.abs(k.x - x), Math.abs(k.y - y)) === 1) return true
+      }
+    }
+    return false
+  }
+
+  const whiteKingInCheck = kingsWhite.length > 0 && isSquareAttackedBy('black', kingsWhite[0].x, kingsWhite[0].y)
+  const blackKingInCheck = kingsBlack.length > 0 && isSquareAttackedBy('white', kingsBlack[0].x, kingsBlack[0].y)
+
+  const mapDisplayToBoard = (displayX, displayY) => {
+    if (rolle === 'black') {
+      return { x: 7 - displayX, y: 7 - displayY }
+    }
+    return { x: displayX, y: displayY }
+  }
 
   const felder = []
 
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      const farbe = (x + y) % 2 === 0 ? '#f0d9b5' : '#b58863'
+  for (let displayY = 0; displayY < 8; displayY++) {
+    for (let displayX = 0; displayX < 8; displayX++) {
+      const { x, y } = mapDisplayToBoard(displayX, displayY)
+      const farbe = (displayX + displayY) % 2 === 0 ? '#f0d9b5' : '#b58863'
       let stein = null
 
       const blackPawnIndex = hasBlackPawnAt(x, y)
@@ -215,6 +459,12 @@ function App() {
       const whiteBishopIndex = hasWhiteBishopAt(x, y)
       const blackQueenIndex = hasBlackQueenAt(x, y)
       const whiteQueenIndex = hasWhiteQueenAt(x, y)
+      const blackKingIndex = hasBlackKingAt(x, y)
+      const whiteKingIndex = hasWhiteKingAt(x, y)
+
+      const isCheckedKingCell =
+        (whiteKingInCheck && whiteKingIndex !== -1) ||
+        (blackKingInCheck && blackKingIndex !== -1)
 
       const isSelectedBlackRook = auswahl === 'rook_black' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedWhiteRook = auswahl === 'rook_white' && selectedFrom?.x === x && selectedFrom?.y === y
@@ -224,6 +474,8 @@ function App() {
       const isSelectedWhiteBishop = auswahl === 'bishop_white' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedBlackQueen = auswahl === 'queen_black' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedWhiteQueen = auswahl === 'queen_white' && selectedFrom?.x === x && selectedFrom?.y === y
+      const isSelectedBlackKing = auswahl === 'king_black' && selectedFrom?.x === x && selectedFrom?.y === y
+      const isSelectedWhiteKing = auswahl === 'king_white' && selectedFrom?.x === x && selectedFrom?.y === y
 
       if (blackPawnIndex !== -1) {
         const isSelected = auswahl === 'pawn_black' && selectedFrom?.x === x && selectedFrom?.y === y
@@ -429,9 +681,52 @@ function App() {
         )
       }
 
+      if (blackKingIndex !== -1) {
+        stein = (
+          <div
+            style={{
+              height: `${cellSize}px`,
+              width: `${cellSize}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: `${Math.floor(cellSize * 0.85)}px`,
+              lineHeight: 1,
+              color: '#111',
+              textShadow: isSelectedBlackKing ? '0 0 4px red' : 'none',
+              userSelect: 'none'
+            }}
+          >
+            ♚
+          </div>
+        )
+      }
+
+      if (whiteKingIndex !== -1) {
+        stein = (
+          <div
+            style={{
+              height: `${cellSize}px`,
+              width: `${cellSize}px`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: `${Math.floor(cellSize * 0.85)}px`,
+              lineHeight: 1,
+              color: '#fff',
+              textShadow: isSelectedWhiteKing ? '0 0 4px red, 0 0 0.5px #000' : '0 0 0.5px #000',
+              WebkitTextStroke: '0.35px #000',
+              userSelect: 'none'
+            }}
+          >
+            ♔
+          </div>
+        )
+      }
+
       felder.push(
         <div
-          key={x + '-' + y}
+          key={displayX + '-' + displayY}
           onClick={async () => {
             if (rolle === 'spectator' || rolle === 'loading') {
               setAuswahl('')
@@ -464,7 +759,7 @@ function App() {
             if (blackPawnIndex !== -1) {
               // Wenn ein weißer Bauer bereits ausgewählt ist, soll der gegnerische
               // schwarze Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if ((auswahl === 'pawn_white' || auswahl === 'rook_white' || auswahl === 'knight_white' || auswahl === 'bishop_white' || auswahl === 'queen_white') && selectedFrom) {
+              if ((auswahl === 'pawn_white' || auswahl === 'rook_white' || auswahl === 'knight_white' || auswahl === 'bishop_white' || auswahl === 'queen_white' || auswahl === 'king_white') && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'black') {
@@ -495,6 +790,8 @@ function App() {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'queen_white' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
+              } else if (auswahl === 'king_white' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
               } else {
                 if (rolle !== 'black') {
                   setAuswahl('')
@@ -516,7 +813,7 @@ function App() {
             if (whitePawnIndex !== -1) {
               // Wenn ein schwarzer Bauer bereits ausgewählt ist, soll der gegnerische
               // weiße Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if ((auswahl === 'pawn_black' || auswahl === 'rook_black' || auswahl === 'knight_black' || auswahl === 'bishop_black' || auswahl === 'queen_black') && selectedFrom) {
+              if ((auswahl === 'pawn_black' || auswahl === 'rook_black' || auswahl === 'knight_black' || auswahl === 'bishop_black' || auswahl === 'queen_black' || auswahl === 'king_black') && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'white') {
@@ -547,6 +844,8 @@ function App() {
                 // gegnerischer Turm als Ziel behandeln
               } else if (auswahl === 'queen_black' && selectedFrom) {
                 // gegnerischer Turm als Ziel behandeln
+              } else if (auswahl === 'king_black' && selectedFrom) {
+                // gegnerischer Turm als Ziel behandeln
               } else {
                 if (rolle !== 'white') {
                   setAuswahl('')
@@ -575,6 +874,8 @@ function App() {
               } else if (auswahl === 'bishop_white' && selectedFrom) {
                 // gegnerisches Pferd als Ziel behandeln
               } else if (auswahl === 'queen_white' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
+              } else if (auswahl === 'king_white' && selectedFrom) {
                 // gegnerisches Pferd als Ziel behandeln
               } else {
                 if (rolle !== 'black') {
@@ -605,6 +906,8 @@ function App() {
                 // gegnerisches Pferd als Ziel behandeln
               } else if (auswahl === 'queen_black' && selectedFrom) {
                 // gegnerisches Pferd als Ziel behandeln
+              } else if (auswahl === 'king_black' && selectedFrom) {
+                // gegnerisches Pferd als Ziel behandeln
               } else {
                 if (rolle !== 'white') {
                   setAuswahl('')
@@ -633,6 +936,8 @@ function App() {
               } else if (auswahl === 'bishop_white' && selectedFrom) {
                 // gegnerischen Läufer als Ziel behandeln
               } else if (auswahl === 'queen_white' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'king_white' && selectedFrom) {
                 // gegnerischen Läufer als Ziel behandeln
               } else {
                 if (rolle !== 'black') {
@@ -663,6 +968,8 @@ function App() {
                 // gegnerischen Läufer als Ziel behandeln
               } else if (auswahl === 'queen_black' && selectedFrom) {
                 // gegnerischen Läufer als Ziel behandeln
+              } else if (auswahl === 'king_black' && selectedFrom) {
+                // gegnerischen Läufer als Ziel behandeln
               } else {
                 if (rolle !== 'white') {
                   setAuswahl('')
@@ -689,6 +996,8 @@ function App() {
               } else if (auswahl === 'knight_white' && selectedFrom) {
                 // gegnerische Dame als Ziel behandeln
               } else if (auswahl === 'queen_white' && selectedFrom) {
+                // gegnerische Dame als Ziel behandeln
+              } else if (auswahl === 'king_white' && selectedFrom) {
                 // gegnerische Dame als Ziel behandeln
               } else {
                 if (rolle !== 'black') {
@@ -717,6 +1026,8 @@ function App() {
                 // gegnerische Dame als Ziel behandeln
               } else if (auswahl === 'queen_black' && selectedFrom) {
                 // gegnerische Dame als Ziel behandeln
+              } else if (auswahl === 'king_black' && selectedFrom) {
+                // gegnerische Dame als Ziel behandeln
               } else {
                 if (rolle !== 'white') {
                   setAuswahl('')
@@ -731,6 +1042,48 @@ function App() {
                 setAuswahl('queen_white')
                 setSelectedFrom({ x, y })
                 setMeldung('Weiße Dame ausgewählt.')
+                return
+              }
+            }
+
+            if (blackKingIndex !== -1) {
+              if (auswahl && selectedFrom && auswahl.endsWith('_white')) {
+                // gegnerischen König als Ziel behandeln (Backend blockiert Schlagen)
+              } else {
+                if (rolle !== 'black') {
+                  setAuswahl('')
+                  setSelectedFrom(null)
+                  setMeldung('Nur Schwarz darf den schwarzen König auswählen.')
+                  return
+                }
+                if (turn !== 'black') {
+                  setMeldung('Schwarz ist gerade nicht am Zug.')
+                  return
+                }
+                setAuswahl('king_black')
+                setSelectedFrom({ x, y })
+                setMeldung('Schwarzer König ausgewählt.')
+                return
+              }
+            }
+
+            if (whiteKingIndex !== -1) {
+              if (auswahl && selectedFrom && auswahl.endsWith('_black')) {
+                // gegnerischen König als Ziel behandeln (Backend blockiert Schlagen)
+              } else {
+                if (rolle !== 'white') {
+                  setAuswahl('')
+                  setSelectedFrom(null)
+                  setMeldung('Nur Weiß darf den weißen König auswählen.')
+                  return
+                }
+                if (turn !== 'white') {
+                  setMeldung('Weiß ist gerade nicht am Zug.')
+                  return
+                }
+                setAuswahl('king_white')
+                setSelectedFrom({ x, y })
+                setMeldung('Weißer König ausgewählt.')
                 return
               }
             }
@@ -750,24 +1103,24 @@ function App() {
                   auswahl === 'rook_black' || auswahl === 'rook_white' ||
                   auswahl === 'knight_black' || auswahl === 'knight_white' ||
                   auswahl === 'bishop_black' || auswahl === 'bishop_white' ||
-                  auswahl === 'queen_black' || auswahl === 'queen_white') &&
+                  auswahl === 'queen_black' || auswahl === 'queen_white' ||
+                  auswahl === 'king_black' || auswahl === 'king_white') &&
                 selectedFrom
               ) {
                 body.from_x = selectedFrom.x
                 body.from_y = selectedFrom.y
               }
 
-              const res = await fetch(`${API_BASE}/move`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-              })
+              if ((auswahl === 'pawn_white' || auswahl === 'pawn_black') && selectedFrom) {
+                const reachesLastRank = (auswahl === 'pawn_white' && y === 0) || (auswahl === 'pawn_black' && y === 7)
+                if (reachesLastRank) {
+                  setPendingPromotion(body)
+                  setMeldung('Bitte Umwandlungsfigur wählen.')
+                  return
+                }
+              }
 
-              const data = await res.json()
-              applyStateFromServer(data)
-              setAuswahl('')
-              setSelectedFrom(null)
-              setMeldung(data.message || (data.accepted ? 'Zug gesendet.' : 'Ungültiger Zug.'))
+              await submitMove(body)
             } catch {
               setMeldung('Zug konnte nicht gesendet werden. Prüfe Backend-Verbindung.')
             }
@@ -775,7 +1128,7 @@ function App() {
           style={{
             height: `${cellSize}px`,
             width: `${cellSize}px`,
-            backgroundColor: farbe,
+            backgroundColor: isCheckedKingCell ? '#ff6b6b' : farbe,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -851,6 +1204,7 @@ function App() {
             Zuschauer
           </button>
         </div>
+        {renderEndOverlay()}
       </div>
     )
   }
@@ -883,6 +1237,7 @@ function App() {
         <div style={{ fontSize: '16px', color: '#444' }}>
           Du bist {rollenText}. Das Spiel startet, sobald beide Farben besetzt sind.
         </div>
+        {renderEndOverlay()}
       </div>
     )
   }
@@ -981,6 +1336,9 @@ function App() {
           {felder}
         </div>
       </div>
+
+      {renderEndOverlay()}
+      {renderPromotionMenu()}
     </div>
   )
 }
