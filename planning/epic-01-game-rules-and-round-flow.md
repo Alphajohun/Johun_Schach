@@ -103,3 +103,30 @@ Regel- und Zuglogik liegen zentral in [`move()`](backend/app.py:328) sowie in de
 - Eigene Figuren auf dem Zielfeld blockieren den Zug; eigene Figuren sind nicht schlagbar.
 - Ungültige Pferd-Züge liefern konsistente Fehlermeldungen in API und UI.
 
+### Story 01.06 - Neue Figur "Läufer" mit Diagonalzug ohne Sprung
+
+**Beschreibung**  
+Als Spieler möchte ich eine neue Figur "Läufer" nutzen, die sich ausschließlich diagonal bewegt und diagonal schlägt, damit diagonale Linien strategisch genutzt werden können.
+
+**Aktueller Bezug**  
+Regel- und Zuglogik liegen zentral in [`move()`](backend/app.py:328) sowie in der Regelübersicht in [`documentation/spielstand-fuer-coding-agent.md`](documentation/spielstand-fuer-coding-agent.md:53).
+
+**Acceptance Criteria**
+
+- Pro Farbe gibt es zwei Läufer auf den Startfeldern wie im Schach:
+  - Weiß: `c1` und `f1` (Koordinaten `x=2,y=7` und `x=5,y=7`)
+  - Schwarz: `c8` und `f8` (Koordinaten `x=2,y=0` und `x=5,y=0`)
+- Die neuen Figur-IDs sind:
+  - `bishop_white`
+  - `bishop_black`
+- Ein Läufer darf sich nur diagonal bewegen:
+  - Betrag der Differenz in `x` entspricht dem Betrag der Differenz in `y` (`abs(dx) == abs(dy)`)
+  - horizontale und vertikale Züge sind für Läufer ungültig
+- Ein Läufer darf nicht über andere Figuren springen:
+  - Alle Zwischenfelder auf der Diagonale müssen frei sein
+- Schlagen ist nur diagonal auf dem Zielfeld erlaubt:
+  - Eigene Figur auf Zielfeld blockiert den Zug
+  - Gegnerische Figur auf Zielfeld wird geschlagen
+- Läufer dürfen gegnerische Bauern, Türme, Pferde und Läufer schlagen.
+- Ungültige Läufer-Züge liefern konsistente Fehlermeldungen in API und UI.
+
