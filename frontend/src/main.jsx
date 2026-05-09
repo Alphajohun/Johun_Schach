@@ -52,6 +52,7 @@ function App() {
   const [meldung, setMeldung] = useState('Verbinde mit Server...')
   const [endOverlay, setEndOverlay] = useState('')
   const [lastRoundEvent, setLastRoundEvent] = useState('')
+  const [lastMove, setLastMove] = useState(null)
   const [pendingPromotion, setPendingPromotion] = useState(null)
   const [players, setPlayers] = useState({ white_taken: false, black_taken: false })
   const gameReady = players.white_taken && players.black_taken
@@ -182,6 +183,11 @@ function App() {
     if (Array.isArray(data.queens_white)) setQueensWhite(data.queens_white)
     if (Array.isArray(data.kings_black)) setKingsBlack(data.kings_black)
     if (Array.isArray(data.kings_white)) setKingsWhite(data.kings_white)
+    if (data.last_move && typeof data.last_move === 'object') {
+      setLastMove(data.last_move)
+    } else if (data.last_move === null) {
+      setLastMove(null)
+    }
     if (typeof data.round_event === 'string' && data.round_event !== '') {
       if (data.round_event !== lastRoundEvent) {
         setLastRoundEvent(data.round_event)
@@ -467,6 +473,24 @@ function App() {
       const isCheckedKingCell =
         (whiteKingInCheck && whiteKingIndex !== -1) ||
         (blackKingInCheck && blackKingIndex !== -1)
+
+      const isLastMoveFromCell =
+        !!lastMove && lastMove.from_x === x && lastMove.from_y === y
+
+      const isLastMoveToCell =
+        !!lastMove && lastMove.to_x === x && lastMove.to_y === y
+
+      const highlightFromCell = 'inset 0 0 0 4px rgba(255, 215, 0, 0.95)'
+      const highlightToCell = 'inset 0 0 0 4px rgba(0, 210, 120, 0.95)'
+
+      const cellBoxShadow =
+        isLastMoveFromCell && isLastMoveToCell
+          ? `${highlightFromCell}, ${highlightToCell}`
+          : isLastMoveToCell
+            ? highlightToCell
+            : isLastMoveFromCell
+              ? highlightFromCell
+              : 'none'
 
       const isSelectedBlackRook = auswahl === 'rook_black' && selectedFrom?.x === x && selectedFrom?.y === y
       const isSelectedWhiteRook = auswahl === 'rook_white' && selectedFrom?.x === x && selectedFrom?.y === y
@@ -1131,6 +1155,7 @@ function App() {
             height: `${cellSize}px`,
             width: `${cellSize}px`,
             backgroundColor: isCheckedKingCell ? '#ff6b6b' : farbe,
+            boxShadow: cellBoxShadow,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

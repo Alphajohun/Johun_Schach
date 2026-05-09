@@ -61,6 +61,7 @@ PLAYER_TIMEOUT_SECONDS = 2.5
 round_event = ""
 round_event_until = 0.0
 en_passant = {"active": False, "by": "", "capture_x": -1, "capture_y": -1, "pawn_x": -1, "pawn_y": -1}
+last_move = None
 
 
 def clear_all_players_and_reset():
@@ -131,6 +132,7 @@ def current_state():
         "score": {"white": white_score, "black": black_score},
         "turn": current_turn,
         "round_event": event_text,
+        "last_move": last_move,
         "players": {
             "white_taken": white_player != "",
             "black_taken": black_player != "",
@@ -154,6 +156,7 @@ def reset_positions():
     global black_kings
     global white_kings
     global en_passant
+    global last_move
     global current_turn
 
     black_pawns = [{"x": x, "y": 1} for x in range(8)]
@@ -169,6 +172,7 @@ def reset_positions():
     black_kings = [{"x": 4, "y": 0}]
     white_kings = [{"x": 4, "y": 7}]
     en_passant = {"active": False, "by": "", "capture_x": -1, "capture_y": -1, "pawn_x": -1, "pawn_y": -1}
+    last_move = None
     current_turn = "white"
 
 
@@ -844,6 +848,7 @@ def move(data: dict):
     global current_turn
     global white_player
     global black_player
+    global last_move
     global white_score
     global black_score
     global round_event
@@ -1447,6 +1452,14 @@ def move(data: dict):
 
     if accepted:
         current_turn = "black" if current_turn == "white" else "white"
+        if from_x is not None and from_y is not None:
+            last_move = {
+                "from_x": from_x,
+                "from_y": from_y,
+                "to_x": x,
+                "to_y": y,
+                "color": color,
+            }
 
     return {
         "accepted": accepted,
