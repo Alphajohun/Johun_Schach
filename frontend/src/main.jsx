@@ -292,7 +292,7 @@ function App() {
             if (blackPawnIndex !== -1) {
               // Wenn ein weißer Bauer bereits ausgewählt ist, soll der gegnerische
               // schwarze Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if (auswahl === 'pawn_white' && selectedFrom) {
+              if ((auswahl === 'pawn_white' || auswahl === 'rook_white') && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'black') {
@@ -338,7 +338,7 @@ function App() {
             if (whitePawnIndex !== -1) {
               // Wenn ein schwarzer Bauer bereits ausgewählt ist, soll der gegnerische
               // weiße Bauer als Ziel-Feld behandelt werden (nicht auswählbar).
-              if (auswahl === 'pawn_black' && selectedFrom) {
+              if ((auswahl === 'pawn_black' || auswahl === 'rook_black') && selectedFrom) {
                 // Kein return: weiter unten wird normal der Move-Request gesendet.
               } else {
               if (rolle !== 'white') {

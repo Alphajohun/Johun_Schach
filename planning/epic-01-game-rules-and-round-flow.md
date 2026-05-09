@@ -35,7 +35,7 @@ Dreiecke heissen ab sofort bauern
 Bauern können diagonal schlagen - ein feld in ihre laufrichtung
 Türme können horizontal und vertikal Figuren schlagen, die nicht durch andere figuren in der sichtlinie verdeckt sind
 figuren können natürlich nur gegnerische figuren schlagen  - das Feld muss besetzt sein
-
+wenn eine Figur angewählt ist und eine gegnerische Figur ausgewählt wird,dann gucken,ob es in der sichtweite der figutr ist und wenn alle schlagbedingungen erfüllt sind,figur schlagen
 
 
 

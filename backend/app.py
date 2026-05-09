@@ -498,13 +498,13 @@ def move(data: dict):
                             "[DEBUG rook-black-capture]",
                             {"to": [x, y], "captured": captured},
                         )
-                black_rooks[idx]["x"] = x
-                black_rooks[idx]["y"] = y
-                accepted = True
-                if target_piece == "":
-                    message = "Schwarzer Turm wurde bewegt."
-                else:
-                    message = "Schwarzer Turm hat geschlagen."
+                    black_rooks[idx]["x"] = x
+                    black_rooks[idx]["y"] = y
+                    accepted = True
+                    if target_piece == "":
+                        message = "Schwarzer Turm wurde bewegt."
+                    else:
+                        message = "Schwarzer Turm hat geschlagen."
 
     # Weißer Turm: horizontal/vertikal, bis vor Hindernis.
     elif color == "rook_white":
@@ -543,13 +543,13 @@ def move(data: dict):
                             "[DEBUG rook-white-capture]",
                             {"to": [x, y], "captured": captured},
                         )
-                white_rooks[idx]["x"] = x
-                white_rooks[idx]["y"] = y
-                accepted = True
-                if target_piece == "":
-                    message = "Weißer Turm wurde bewegt."
-                else:
-                    message = "Weißer Turm hat geschlagen."
+                    white_rooks[idx]["x"] = x
+                    white_rooks[idx]["y"] = y
+                    accepted = True
+                    if target_piece == "":
+                        message = "Weißer Turm wurde bewegt."
+                    else:
+                        message = "Weißer Turm hat geschlagen."
 
     else:
         message = "Unbekannte Figur."
